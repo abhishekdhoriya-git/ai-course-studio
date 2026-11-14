@@ -5,6 +5,10 @@ versioned artifacts, explicit human review gates and repository-local skills.
 This repository is public; course data and media stay in ignored `.studio`
 storage.
 
+The [approved product plan](docs/approved-plan.md) preserves the original scope
+and delivery gates. Its historical greenfield wording is not an implementation
+status report; the working slices and remaining limits are documented here.
+
 **Foundation slice:** seven executable workflows, typed manifests, an immutable
 skill registry, per-video repetition tracking, bounded retries/recovery and a
 usable loopback-only review UI. Unconfigured authoring and provider steps pause
