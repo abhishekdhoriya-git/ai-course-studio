@@ -14,6 +14,7 @@ let dirty = false;
 let refreshBusy = false;
 let signature = "";
 let editing = false;
+const playbackPositions = new Map<string, number>();
 
 function required<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -109,7 +110,8 @@ async function refresh(force = false): Promise<void> {
     const next = JSON.stringify(state);
     const focusedControl = document.activeElement instanceof HTMLInputElement
       || document.activeElement instanceof HTMLTextAreaElement || document.activeElement instanceof HTMLSelectElement;
-    if (force || (next !== signature && !dirty && !editing && !focusedControl)) { signature = next; render(); }
+    const playing = document.querySelector<HTMLVideoElement>(".preview-media video");
+    if (force || (next !== signature && !dirty && !editing && !focusedControl && (!playing || playing.paused))) { signature = next; render(); }
   } catch (error) { notify(error instanceof Error ? error.message : "Review refresh failed.", true); }
   finally { refreshBusy = false; }
 }
@@ -164,13 +166,23 @@ function renderReview(): void {
     const header = element("div", "preview-heading");
     header.append(element("h2", "", state.fixture.title), tag("Engineering fixture", "fixture"));
     const media = element("div", "preview-media");
-    const output = state.fixture.output ? state.artifacts.find((record) => record.id === state!.fixture!.output!.id
-      && record.version === state!.fixture!.output!.version) : undefined;
+    const requested = new URL(location.href).searchParams;
+    const historicalOutput = state.artifacts.find((record) => record.kind === "lesson-output"
+      && record.id === requested.get("artifact") && record.version === Number(requested.get("version")));
+    const output = historicalOutput ?? (state.fixture.output ? state.artifacts.find((record) => record.id === state!.fixture!.output!.id
+      && record.version === state!.fixture!.output!.version) : undefined);
+    if (output) header.append(tag(`v${output.version}${output.invalidatedAt !== null ? " / invalidated" : ""}`, output.invalidatedAt !== null ? "invalidated" : "current"));
     if (output && "media" in output.content) {
       const video = element("video");
       video.controls = true; video.preload = "metadata"; video.width = 1280; video.height = 720;
       video.setAttribute("aria-label", "Engineering fixture with a non-cloned placeholder presenter and synthetic voice");
       video.src = mediaUrl(output.content.media);
+      const playbackKey = `${output.id}@${output.version}`;
+      video.addEventListener("timeupdate", () => playbackPositions.set(playbackKey, video.currentTime));
+      video.addEventListener("loadedmetadata", () => {
+        const position = playbackPositions.get(playbackKey);
+        if (position !== undefined && position < video.duration) video.currentTime = position;
+      }, { once: true });
       if (state.fixture.poster) video.poster = mediaUrl(state.fixture.poster);
       for (const captionRef of "captions" in output.content ? output.content.captions : []) {
         const caption = state.artifacts.find((record) => record.id === captionRef.id && record.version === captionRef.version);
@@ -190,7 +202,9 @@ function renderReview(): void {
       media.append(poster);
     }
     const footer = element("div", "preview-footer");
-    footer.append(element("p", "", output ? "Actual local media. Owner lesson review remains a separate decision." : "Original still sample. Review the exact inputs before rendering."));
+    footer.append(element("p", "", output
+      ? `Actual local media / exact v${output.version}${output.invalidatedAt !== null ? " / historical, not approvable" : " / final owner review is separate"}.`
+      : "Original still sample. Review the exact inputs before rendering."));
     const renderButton = button(output ? "Render current fixture again" : "Render approved fixture", async () => {
       await post("/api/fixture/render", {}); notify("The local fixture job is queued. Rendering and final review remain separate stages."); await refresh(true);
     }, "primary small");
@@ -199,11 +213,17 @@ function renderReview(): void {
     preview.append(header, media, footer);
     if (output) {
       const downloads = element("div", "preview-footer download-links");
+      const reportRef = output.dependencies.find((ref) => ref.id === "fixture:media-checks");
+      const report = reportRef ? state.artifacts.find((record) => record.id === reportRef.id && record.version === reportRef.version) : undefined;
+      const related = report && "references" in report.content ? report.content.references : [];
       for (const [id, label] of [
         ["fixture:media:master", "Clean MP4"], ["fixture:media:captioned", "Captioned MP4"],
         ["fixture:media:srt", "SRT"], ["fixture:media:vtt", "VTT"], ["fixture:media:transcript", "Final transcript"],
       ] as const) {
-        const asset = currentRecords().find((record) => record.id === id);
+        const relatedRef = id === "fixture:media:master" && "media" in output.content ? output.content.media
+          : related.find((ref) => ref.id === id);
+        const asset = relatedRef ? state.artifacts.find((record) => record.id === relatedRef.id && record.version === relatedRef.version)
+          : output.invalidatedAt === null ? currentRecords().find((record) => record.id === id) : undefined;
         if (asset) { const link = element("a", "", label); link.href = mediaUrl(asset); link.download = ""; downloads.append(link); }
       }
       preview.append(downloads);
@@ -428,6 +448,14 @@ function renderSkills(): void {
     element("p", "muted", "At 3 distinct work items, direct work can continue. Before a foreseeable batch of 4, or before an emerging fourth item, a reviewed tested skill must exist. Stable work-item IDs dedupe retries and resumed work."),
     element("p", "help-note", "A draft is not approval. New versions require independent skill-review and an installed allowlisted adapter. Active jobs keep their original version pins."));
   stack.append(rule); panel.replaceChildren(stack);
+  if (state.repetitions.length) {
+    const counts = element("div", "card");
+    counts.append(element("h2", "", "Durable per-video counters"));
+    for (const row of state.repetitions) {
+      counts.append(element("p", "meta", `${row.videoId} / ${row.activityKey}: ${row.planned} distinct planned work items, ${row.started} started. Retries, polling, frames and resumed duplicates excluded.`));
+    }
+    stack.append(counts);
+  }
 }
 
 function renderQuality(): void {

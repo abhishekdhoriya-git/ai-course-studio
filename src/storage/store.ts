@@ -213,7 +213,8 @@ export class StudioStore {
     return artifact;
   }
   isCurrent(ref: ArtifactRef): boolean {
-    try { this.requireCurrent(ref); return true; } catch { return false; }
+    try { this.requireCurrent(ref); return true; }
+    catch (error) { if (error instanceof StaleInputError) return false; throw error; }
   }
   descendants(roots: ArtifactRef[], includeRoots = true): ArtifactRef[] {
     const found = new Map<string, ArtifactRef>();
@@ -571,6 +572,13 @@ export class StudioStore {
       pin: decode<SkillPin>(row["pin_json"]), input: decode<Json>(row["input_json"]),
       output: row["output_json"] == null ? null : decode<Json>(row["output_json"]),
       outcome: String(row["outcome"]) as SkillInvocation["outcome"], error: nullableString(row["error"]),
+    }));
+  }
+  listActivitySummaries(): { videoId: string; activityKey: string; planned: number; started: number }[] {
+    return this.db.prepare(`SELECT video_id,activity_key,count(*) AS planned,sum(started) AS started
+      FROM activity_items GROUP BY video_id,activity_key ORDER BY video_id,activity_key`).all().map((row) => ({
+      videoId: String(row["video_id"]), activityKey: String(row["activity_key"]),
+      planned: Number(row["planned"]), started: Number(row["started"]),
     }));
   }
 

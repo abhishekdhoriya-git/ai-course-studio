@@ -11,7 +11,7 @@ import type { FixtureStageAdapter, StageAdapterContext } from "../controller.js"
 import type { StageOutputRequest } from "../domain/runtime.js";
 import type { StudioStore } from "../storage/store.js";
 import type { SkillRegistry } from "../skills/registry.js";
-import { requireFixtureGates } from "../fixture.js";
+import { fixtureSceneTemplates, requireFixtureGates } from "../fixture.js";
 import {
   FIXTURE_MANIFEST_ID, FIXTURE_VIDEO_ID, fixturePlanSchema, mediaCheckSchema, renderManifestSchema, speechResultSchema,
 } from "./contracts.js";
@@ -48,6 +48,10 @@ class FixturePipeline {
     const scenes = plan.scenes.map((ref) => artifactSchemas.scene.parse(this.store.requireCurrent(ref).content));
     if (canonicalJson(scenes) !== canonicalJson(storyboard.scenes) || scenes.some((scene) => !sceneLayouts[scene.sceneId] || scene.videoId !== plan.videoId)) {
       throw new StudioError("FIXTURE_SCENE_MISMATCH", "Scene versions must exactly match the approved fixture storyboard and supported original layouts.");
+    }
+    if (new Set(scenes.map((scene) => scene.sceneId)).size !== 4) throw new StudioError("FIXTURE_SCENE_MISMATCH", "The fixture requires four distinct scene work items.");
+    if (scenes.some((scene) => scene.visual !== fixtureSceneTemplates.find((template) => template.sceneId === scene.sceneId)?.visual)) {
+      throw new MissingInputError("FIXTURE_VISUAL_UNSUPPORTED", "The engineering fixture supports its original vector layouts and script revisions only. Install and review a new template/asset adapter for a visual replacement; it will not be silently ignored.");
     }
     const style = artifactSchemas["style-pack"].parse(this.store.requireCurrent(plan.style).content);
     if (style.templateVersion !== "1.0.0" || style.parameters["background"] !== "#101827"
@@ -310,6 +314,23 @@ class FixturePipeline {
         throw new StudioError("AUDIO_VALIDATION", "Fixture speech must measure -18 LUFS +/-2, true peak <=-1 dBTP and no unexpected silence >=2 seconds.");
       }
       this.plan(context);
+      const previousOutput = this.store.latestArtifact("fixture:output");
+      const previousReport = this.store.latestArtifact("fixture:media-checks");
+      const unchangedFiles = [
+        ["fixture:media:master", master], ["fixture:media:captioned", captioned],
+        ["fixture:media:srt", srt], ["fixture:media:vtt", vtt], ["fixture:media:transcript", transcript],
+      ] as const;
+      const unchanged = unchangedFiles.every(([id, file]) => {
+        const record = this.store.latestArtifact(id);
+        if (!record || record.kind !== "asset" || !this.store.isCurrent(record)) return false;
+        const content = artifactSchemas.asset.parse(record.content);
+        return content.path === relative(this.root, file) && content.sha256 === sha256File(file);
+      });
+      if (previousOutput && previousReport && this.store.isCurrent(previousOutput) && this.store.isCurrent(previousReport)
+        && canonicalJson(artifactSchemas["lesson-output"].parse(previousOutput.content).composition) === canonicalJson(composition.ref)
+        && unchanged) {
+        return { summary: "Reused the exact previously verified unchanged fixture output and its approvals; no new content version was created.", references: [toRef(previousOutput), toRef(previousReport)] };
+      }
       const media = this.asset("fixture:media:master", master, "video/mp4", [composition.ref], context, "Actual Remotion/FFmpeg clean engineering-fixture render; no cloned presenter and no burned-in captions.");
       const captionedAsset = this.asset("fixture:media:captioned", captioned, "video/mp4", [composition.ref], context, "Actual FFmpeg captioned variant using measured final audio cues.");
       const fullAudio = this.save({

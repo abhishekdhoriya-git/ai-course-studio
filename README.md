@@ -67,6 +67,21 @@ dataset and never grants these test decisions. The speech adapter fixes output
 to 16 kHz PCM before 48 kHz normalization so speech-event clocks match actual
 audio. Missing voices, tools or failed media checks stop explicitly.
 
+`npm run test:render` additionally copies the verification database into an
+isolated test directory, checks unchanged approved-output reuse, revises one
+script, injects a classified pre-render interruption, reopens the job and renders
+the revision. It verifies that 3 unaffected scene assets and completed narration/
+skill invocations remain unchanged. The source review dataset is not approved or
+modified by this copied test. This opt-in check needs Windows speech; CI runs the
+contract/build/browser checks without generating narration.
+
+Script revisions use the original 4 vector layouts. A request for different
+visuals or B-roll pauses until a compatible reviewed template/asset adapter is
+installed; it is never silently ignored. Historical lesson versions preview
+their own media, and downloads retain exact asset versions. A matching cached
+render reuses its verification/approval references; `renderMs` describes the
+execution that produced those measurements, not a fresh-render benchmark.
+
 ## Skills, workflows and durability
 
 Local skills live in `.github\skills\<name>\SKILL.md`. Each admitted executable
@@ -122,6 +137,11 @@ approval/retry source and prepares anonymous procedure comparison packets.
 The live Quality page separates technical checks, blind verdicts and blockers.
 It never converts unavailable evidence into a win. This is a narrow procedure
 comparison, not a claim to replace or outperform Temporal's distributed platform.
+The implementation's blind procedure comparison preferred the studio after a
+revocation-fencing fix. The fetched Frame.io guided entry and HelloWorld logo
+animation do not supply a comparable course-approval/premium-teaching style bar,
+so those visual verdicts are explicitly blocked rather than fabricated.
+A comparable authorized lesson/style reference remains a user decision.
 
 Verify [Remotion eligibility](https://www.remotion.dev/docs/license/pricing)
 before commercial/team production and the selected

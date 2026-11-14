@@ -15,6 +15,7 @@ export interface ReviewState {
   decisions: ReviewDecision[];
   workflows: { id: string; version: string; description: string; stageCount: number }[];
   skills: SkillPin[];
+  repetitions: { videoId: string; activityKey: string; planned: number; started: number }[];
   quality: QualityRound[];
   fixture: {
     title: string; manifest: ArtifactRef | null; output: ArtifactRef | null; poster: ArtifactRef | null;

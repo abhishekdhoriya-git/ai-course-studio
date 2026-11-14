@@ -7,10 +7,12 @@ import type { TestContext } from "node:test";
 import { startStudioServer } from "../src/server.js";
 import { relativePathSchema } from "../src/domain/schemas.js";
 import type { ReviewState } from "../src/review-contract.js";
+import { createFixtureAdapters } from "../src/media/pipeline.js";
+import { currentFixture, fixtureGates } from "../src/fixture.js";
 
-async function setup(t: TestContext) {
+async function setup(t: TestContext, withRenderer = false) {
   const data = `.studio\\review-tests\\${randomUUID()}`;
-  const server = await startStudioServer({ port: 0, dataDirectory: data });
+  const server = await startStudioServer({ port: 0, dataDirectory: data, ...(withRenderer ? { fixtureAdapters: createFixtureAdapters } : {}) });
   t.after(async () => { await server.close(); rmSync(join(process.cwd(), data), { recursive: true, force: true }); });
   const read = async () => (await (await fetch(`${server.url}/api/state`)).json()) as ReviewState;
   const state = await read();
@@ -61,4 +63,25 @@ test("asset paths reject absolute paths, traversal, control characters and Windo
     assert.equal(relativePathSchema.safeParse(path).success, false);
   }
   assert.equal(relativePathSchema.safeParse(".studio\\media\\fixture.wav").success, true);
+});
+
+test("unsupported fixture visuals pause explicitly before any speech or media is generated", async (t) => {
+  const f = await setup(t, true);
+  await f.server.app.loadFixture();
+  const scene = f.server.app.store.latestArtifact("fixture:scene:gates")!;
+  f.server.app.saveArtifact({
+    id: scene.id, kind: scene.kind, content: { ...scene.content, visual: "A different, unimplemented visual replacement." },
+    expectedVersion: scene.version, dependencies: scene.dependencies,
+  });
+  for (const gate of fixtureGates(f.server.app.store, currentFixture(f.server.app.store)!)) f.server.app.store.recordDecision({
+    artifactId: gate.ref.id, version: gate.ref.version, gate: gate.gate, decision: "approved",
+    note: "Isolated contract test only.",
+  });
+  const jobId = f.server.app.renderFixture();
+  await f.server.app.drain();
+  const job = f.server.app.store.getJob(jobId)!;
+  assert.equal(job.status, "paused");
+  assert.match(job.reason!, /FIXTURE_VISUAL_UNSUPPORTED/);
+  assert.equal(f.server.app.store.listArtifacts({ kind: "audio" }).length, 0);
+  assert.equal(f.server.app.store.latestArtifact("fixture:output"), undefined);
 });

@@ -8,7 +8,7 @@ import type { StudioStore } from "./storage/store.js";
 import { FIXTURE_MANIFEST_ID, FIXTURE_VIDEO_ID, fixturePlanSchema } from "./media/contracts.js";
 import type { FixturePlan } from "./media/contracts.js";
 
-const sceneDrafts = [
+export const fixtureSceneTemplates = [
   {
     sceneId: "disclosure", purpose: "Distinguish an engineering fixture from a selected course pilot.",
     script: "This is an engineering fixture, not a course pilot. The on-screen presenter is a simple illustrated stand-in. The narration uses a local synthetic voice. Neither is a clone of the owner.",
@@ -120,7 +120,7 @@ export function prepareFixture(store: StudioStore, workspaceRoot: string): Fixtu
       parameters: { background: "#101827", accent: "#68e8c5", font: "Arial", captionSafeAreaPx: 96 },
     },
   });
-  const scenes = sceneDrafts.map((draft) => store.saveArtifact({
+  const scenes = fixtureSceneTemplates.map((draft) => store.saveArtifact({
     id: `fixture:scene:${draft.sceneId}`, kind: "scene",
     content: { ...draft, videoId: FIXTURE_VIDEO_ID, assets: [], activities: ["produce-fixture-scene", "review-scene"] },
     dependencies: [lesson, evidence],

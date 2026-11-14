@@ -83,7 +83,7 @@ export class StudioApp {
       workflows: workflowDefinitions.map((workflow) => ({
         id: workflow.id, version: workflow.version, description: workflow.description, stageCount: workflow.stages.length,
       })),
-      skills: this.registry.list(), quality: qualityRounds(this.store),
+      skills: this.registry.list(), repetitions: this.store.listActivitySummaries(), quality: qualityRounds(this.store),
       fixture: fixture ? {
         title: fixture.title, manifest: toRef(this.store.latestArtifact("fixture:manifest")!),
         poster: fixture.poster, output: output && this.store.isCurrent(output) ? output : null,
