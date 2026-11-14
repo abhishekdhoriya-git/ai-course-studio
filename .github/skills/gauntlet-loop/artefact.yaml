@@ -1,0 +1,41 @@
+name: gauntlet-loop
+description: Produce a short prompt for a fresh-context builder and harsh blind critic against a real fetchable quality bar.
+author: Jay E / RoboNuggets; technique by Matt Shumer
+maintainers: []
+support: ""
+version: 1.0.0-portable
+created: 2026-11-14
+updated: 2026-11-14
+license: CC-BY-4.0
+status: beta
+type: skill
+category: testing
+installer-group: productivity
+roles: [all]
+phases: [build]
+methodologies: [all]
+distribution:
+  rapid-module:
+    mode: standalone
+compatibility:
+  copilot: Independent builder and critic contexts; no automatic execution
+prerequisites:
+  mcp_servers: []
+  cli_tools: []
+  python_packages: []
+  npm_packages: []
+  extensions: []
+  environment:
+    - name: Skill-capable agent host
+      purpose: Fetch references and run independently contextualized builders and critics
+      required: true
+documentation: https://github.com/abhishekdhoriya-git/ai-course-studio
+repo: abhishekdhoriya-git/ai-course-studio
+project: AI Course Studio
+product-family: []
+products: []
+technologies: [typescript]
+tags: [quality, blind-comparison, externally-sourced]
+source:
+  url: https://github.com/robonuggets/gauntlet-loop
+  commit: f2c462ee0727035719e4b5c8d69195f8ba4f1c4e

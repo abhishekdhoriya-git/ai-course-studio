@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10141e">
+  <meta name="color-scheme" content="dark">
+  <title>AI Course Studio | Local review desk</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/client.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to review desk</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Studio navigation">
+      <a class="wordmark" href="/"><span class="mark" aria-hidden="true">S</span><span>Course Studio<span class="wordmark-sub">PRODUCTION DESK</span></span></a>
+      <div class="workspace-label"><span class="status-dot" aria-hidden="true"></span>Local workspace</div>
+      <nav aria-label="Main navigation" id="tabs">
+        <a href="/?tab=review" data-tab="review"><span aria-hidden="true">01</span>Review desk</a>
+        <a href="/?tab=brief" data-tab="brief"><span aria-hidden="true">02</span>Course brief</a>
+        <a href="/?tab=workflows" data-tab="workflows"><span aria-hidden="true">03</span>Workflows</a>
+        <a href="/?tab=skills" data-tab="skills"><span aria-hidden="true">04</span>Skill registry</a>
+        <a href="/?tab=quality" data-tab="quality"><span aria-hidden="true">05</span>Quality loop</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="boundary-title">Your decisions stay yours.</div>
+        <p>No purchases, identity uploads, provider calls or publishing.</p>
+        <div class="sidebar-tag">LOCAL FILES ONLY</div>
+        <p class="tiny">Pilot subject, audience, provider and budget remain undecided.</p>
+      </div>
+    </aside>
+    <main id="main" tabindex="-1">
+      <header class="topbar">
+        <span class="breadcrumb">WORKSPACE <span aria-hidden="true">/</span> <strong id="page-name">Review desk</strong></span>
+        <span class="local-pill"><span class="status-dot" aria-hidden="true"></span>External effects disabled</span>
+      </header>
+      <div class="page">
+        <div class="page-heading">
+          <div><p class="eyebrow">AI COURSE-PRODUCTION STUDIO</p><h1 id="page-title">Make every version reviewable.</h1><p id="page-description" class="lede">A local production pipeline with clear gates, durable work and no hidden approvals.</p></div>
+          <button id="load-fixture" class="button secondary" type="button">Load engineering fixture</button>
+        </div>
+        <div id="notice" class="notice" role="status" aria-live="polite"></div>
+        <section id="review-panel" aria-label="Review desk"></section>
+        <section id="brief-panel" aria-labelledby="brief-title" hidden>
+          <div class="card form-card">
+            <p class="eyebrow">START WITH INTENT</p><h2 id="brief-title">Describe the course.</h2>
+            <p class="muted">This saves your brief. It does not invent a curriculum or select a provider.</p>
+            <form id="brief-form">
+              <div class="form-grid">
+                <label>Course title<input name="title" required maxlength="240" autocomplete="off" placeholder="A clear working title"></label>
+                <label>Subject or niche<input name="niche" required maxlength="1000" autocomplete="off" placeholder="Your selected pilot subject"></label>
+                <label>Audience<input name="audience" required maxlength="1000" autocomplete="off" placeholder="Who this course teaches"></label>
+                <label>Language<input name="language" required maxlength="100" autocomplete="off" placeholder="For example, en-US"></label>
+              </div>
+              <label>Learning objectives<span class="field-hint">One outcome per line.</span><textarea name="objectives" rows="4" required autocomplete="off" placeholder="What learners will be able to do"></textarea></label>
+              <label>Prerequisites<span class="field-hint">One prerequisite per line. Leave blank if none.</span><textarea name="prerequisites" rows="3" autocomplete="off"></textarea></label>
+              <p id="brief-error" class="field-error" role="alert"></p>
+              <div class="form-footer"><span class="muted">Saved privately to local SQLite.</span><button class="button primary" type="submit">Save course brief</button></div>
+            </form>
+          </div>
+        </section>
+        <section id="workflows-panel" aria-label="Durable workflows" hidden></section>
+        <section id="skills-panel" aria-label="Local skill registry" hidden></section>
+        <section id="quality-panel" aria-label="Auditable quality comparisons" hidden></section>
+      </div>
+    </main>
+  </div>
+  <dialog id="confirmation">
+    <form method="dialog"><h2 id="confirmation-title">Confirm change</h2><p id="confirmation-message"></p><div class="dialog-actions"><button class="button secondary" value="cancel">Keep current state</button><button class="button danger" value="confirm">Confirm</button></div></form>
+  </dialog>
+</body>
+</html>

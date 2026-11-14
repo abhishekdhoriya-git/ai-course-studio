@@ -1,0 +1,69 @@
+name: review-artifacts
+version: 1.0.0
+license: MIT
+author: AI Course Studio contributors
+maintainers: []
+support: ""
+created: 2026-11-14
+updated: 2026-11-14
+status: beta
+type: skill
+category: testing
+installer-group: delivery
+roles: [all]
+phases: [build]
+methodologies: [all]
+distribution:
+  rapid-module:
+    mode: standalone
+compatibility:
+  copilot: Optional skill discovery; execution requires the studio's compiled adapter
+prerequisites:
+  mcp_servers: []
+  cli_tools: []
+  python_packages: []
+  npm_packages: []
+  extensions: []
+  environment:
+    - name: AI Course Studio local runtime
+      purpose: Provide the allowlisted typed adapter and SQLite invocation ledger
+      required: true
+documentation: https://github.com/abhishekdhoriya-git/ai-course-studio
+repo: abhishekdhoriya-git/ai-course-studio
+project: AI Course Studio
+product-family: []
+products: []
+technologies: [typescript, sqlite]
+tags: [artifacts, versioning, structural-review]
+execution: local-adapter
+activityKeys: [review-artifacts, review-scene]
+adapter:
+  id: studio.review-artifacts
+  version: 1.0.0
+contracts:
+  input: studio.artifact-review.input@1
+  output: studio.artifact-review.output@1
+review:
+  status: reviewed
+  kind: contract-tests
+  evidence: Executable contract examples; tests\skills.test.ts. This is not owner content approval.
+examples:
+  - name: empty manifest remains human gated
+    input:
+      subject: Missing author inputs
+      artifacts: []
+    output:
+      checked: 0
+      issues: [{code: NO_INPUTS, artifactId: null}]
+      humanReviewRequired: true
+  - name: stale reference is reported
+    input:
+      subject: Stale local reference
+      artifacts:
+        - ref: {id: example, version: 1, hash: "0000000000000000000000000000000000000000000000000000000000000000"}
+          kind: workflow-report
+          current: false
+    output:
+      checked: 1
+      issues: [{code: STALE_ARTIFACT, artifactId: example}]
+      humanReviewRequired: true

@@ -1,0 +1,104 @@
+# AI Course Studio
+
+A local-first TypeScript/Node.js production desk with SQLite durability,
+versioned artifacts, explicit human review gates and repository-local skills.
+This repository is public; course data and media stay in ignored `.studio`
+storage.
+
+**Foundation slice:** seven executable workflows, typed manifests, an immutable
+skill registry, per-video repetition tracking, bounded retries/recovery and a
+usable loopback-only review UI. Unconfigured authoring and provider steps pause
+with an explicit reason rather than fabricate completed work.
+
+## Run locally
+
+Use Node.js 24 and run these commands from the repository root:
+
+```powershell
+npm ci
+npm run doctor
+npm run check
+npm run build
+npm start
+```
+
+Open **http://127.0.0.1:4317**. The review desk provides a brief editor, artifact
+previews, exact-version approval/rejection, JSON editing, workflow start/resume/
+cancel, targeted revision mapping, skill pins and the live quality-loop page.
+
+`npm run test:ui` exercises actual browser flows using installed Microsoft Edge.
+The core tests use isolated file-backed databases and injected test adapters;
+they never call a paid media provider.
+
+## Engineering fixture, not a pilot
+
+Choose **Load engineering fixture** in the UI, or run `npm run fixture`.
+It creates explicitly labeled drafts and an original still style sample.
+Nothing is approved automatically. Review the current curriculum, style sample,
+style pack, lesson and script/storyboard versions before rendering.
+
+The fixture demonstrates studio contracts; it does not select your actual
+subject, audience, language, lesson length, presenter provider, budget or brand.
+The local Remotion/FFmpeg adapters are a separate implementation slice. Missing
+adapters stop explicitly; a still image is not reported as a rendered lesson.
+
+## Skills, workflows and durability
+
+Local skills live in `.github\skills\<name>\SKILL.md`. Each admitted executable
+package has typed adapter contracts, representative examples and a reviewed
+version. SQLite snapshots its files and hashes; jobs pin the exact skill,
+adapter and workflow versions. A changed active package needs a version bump
+and independent review, not a silent production-time rewrite.
+
+Extraction triggers at **4 distinct work items within one video**. A foreseeable
+four-item batch stops before any affected work begins if a suitable reviewed
+skill is missing. An emerging fourth stops before it starts. Retry, polling,
+frame, controller and resumed-duplicate events never raise the count. Videos
+never aggregate their counters.
+
+The seven workflows under `src\workflows` are course planning, style calibration,
+lesson production, presenter enrollment, targeted revision, skill maintenance
+and course batch. See [their integration contract](src/workflows/README.md).
+
+Replacing an artifact or revoking its approval invalidates affected derived
+versions, approvals and jobs atomically. Unrelated scenes remain reusable.
+Expired leases recover without rerunning completed stages; stale inputs and
+cancelled workers cannot commit. Provider-operation test seams reconcile an
+uncertain dispatch instead of blindly submitting again.
+
+## Boundaries and remaining decisions
+
+No purchases, provider calls, identity/voice uploads, cloud deployment or
+publishing are implemented. Forged approvals cannot enable those adapters.
+Fixtures and test-provider operations cannot unlock real-presenter course
+batches. A new real pilot needs your content, provider/data-handling and budget
+decisions, then the required current-version approvals.
+
+The Copilot app/CLI supports `.github\skills` discovery
+([official documentation](https://docs.github.com/en/copilot/concepts/customizations/agent-skills)).
+This slice does not automate the chat UI, borrow model credentials or include
+a programmatic Copilot SDK controller. Account/model allowance and policy are
+not verified by a successful local build.
+
+Keep credentials, recordings, generated media, databases and private references
+out of commits. The server binds only to loopback, checks Host/Origin, requires
+a review-session token for writes, validates JSON and serves only hashed private
+media of allowlisted types.
+
+## Quality and licenses
+
+The vendored `gauntlet-loop` is pinned and attributed under CC BY 4.0; see its
+[notice](.github/skills/gauntlet-loop/LICENSE.TXT). The first-party structural
+review skill is MIT licensed. No reference footage, scripts, brand artwork or
+identity are reused in the fixture.
+
+`node --import tsx src\cli.ts quality-prepare` fetches the actual pinned Temporal
+approval/retry source and prepares anonymous procedure comparison packets.
+The live Quality page separates technical checks, blind verdicts and blockers.
+It never converts unavailable evidence into a win. This is a narrow procedure
+comparison, not a claim to replace or outperform Temporal's distributed platform.
+
+Verify [Remotion eligibility](https://www.remotion.dev/docs/license/pricing)
+before commercial/team production and the selected
+[FFmpeg build obligations](https://ffmpeg.org/legal.html) before redistribution.
+Native package binaries and generated media are not committed.

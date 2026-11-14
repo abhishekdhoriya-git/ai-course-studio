@@ -1,0 +1,16 @@
+SPDX-License-Identifier: CC-BY-4.0
+
+Gauntlet Loop, by Jay E / RoboNuggets, technique by Matt Shumer.
+https://github.com/robonuggets/gauntlet-loop
+Pinned source: f2c462ee0727035719e4b5c8d69195f8ba4f1c4e
+
+This work is licensed under the Creative Commons Attribution 4.0
+International Public License. The license text, including its disclaimer
+of warranties and limitation of liability, is incorporated by reference:
+https://creativecommons.org/licenses/by/4.0/legalcode.en
+
+Upstream license text:
+https://github.com/robonuggets/gauntlet-loop/blob/f2c462ee0727035719e4b5c8d69195f8ba4f1c4e/LICENSE
+
+Modification: only the Claude-specific prompt endings were replaced with
+the upstream-provided portable ending. No endorsement is implied.
