@@ -192,7 +192,9 @@ export class SkillRegistry {
   }
   private assertReviewed(pin: SkillPin): void {
     if (pin.promptOnly || (pin.name === "review-artifacts" && pin.version === "1.0.0"
-      && pin.adapterId === "studio.review-artifacts" && pin.adapterVersion === "1.0.0")) return;
+      && pin.adapterId === "studio.review-artifacts" && pin.adapterVersion === "1.0.0")
+      || (pin.name === "produce-fixture-scene" && pin.version === "1.0.0"
+      && pin.adapterId === "studio.fixture-scene-contract" && pin.adapterVersion === "1.0.0")) return;
     const reviewed = this.store.listArtifacts({ kind: "skill-draft" }).some((artifact) => {
       const draft = z.object({
         name: z.string(), version: z.string(), documentHash: z.string(),

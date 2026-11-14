@@ -122,7 +122,7 @@ export function prepareFixture(store: StudioStore, workspaceRoot: string): Fixtu
   });
   const scenes = sceneDrafts.map((draft) => store.saveArtifact({
     id: `fixture:scene:${draft.sceneId}`, kind: "scene",
-    content: { ...draft, videoId: FIXTURE_VIDEO_ID, assets: [], activities: ["review-scene"] },
+    content: { ...draft, videoId: FIXTURE_VIDEO_ID, assets: [], activities: ["produce-fixture-scene", "review-scene"] },
     dependencies: [lesson, evidence],
   }));
   const storyboard = store.saveArtifact({

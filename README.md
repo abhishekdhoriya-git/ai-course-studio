@@ -39,8 +39,33 @@ style pack, lesson and script/storyboard versions before rendering.
 
 The fixture demonstrates studio contracts; it does not select your actual
 subject, audience, language, lesson length, presenter provider, budget or brand.
-The local Remotion/FFmpeg adapters are a separate implementation slice. Missing
-adapters stop explicitly; a still image is not reported as a rendered lesson.
+The installed local pipeline uses Windows built-in synthetic speech, measured
+word events, Remotion and FFmpeg. It produces a **1280x720, 24 fps engineering
+fixture**, not the selected real pilot format: clean and captioned MP4 variants,
+SRT/VTT and a final spoken-word transcript. Its presenter and voice are explicitly
+non-cloned. No reference footage or music is used.
+
+`npm run render:fixture` requires your current fixture input approvals. For an
+isolated engineering verification, run:
+
+```powershell
+npm run render:fixture -- --verification
+```
+
+This opt-in command uses `.studio\verification` and visibly marked **test-harness
+preflight decisions**, not owner approval of a pilot. Actual media is rendered
+and checked; the job still pauses for final human `fixture-review`. To inspect
+that dataset in the UI:
+
+```powershell
+$env:STUDIO_DATA = ".studio\verification"
+npm start
+```
+
+The verification banner remains visible. Normal `npm start` uses your own review
+dataset and never grants these test decisions. The speech adapter fixes output
+to 16 kHz PCM before 48 kHz normalization so speech-event clocks match actual
+audio. Missing voices, tools or failed media checks stop explicitly.
 
 ## Skills, workflows and durability
 

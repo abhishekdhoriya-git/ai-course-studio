@@ -11,6 +11,7 @@ import type { AppOptions } from "./app.js";
 import { artifactSchemas, artifactRefSchema } from "./domain/schemas.js";
 import { StudioError } from "./domain/errors.js";
 import { sha256File } from "./domain/hash.js";
+import { createFixtureAdapters } from "./media/pipeline.js";
 
 const BODY_LIMIT = 1024 * 1024;
 const policy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
@@ -185,7 +186,8 @@ export async function startStudioServer(options: AppOptions & { port?: number } 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const port = z.coerce.number().int().min(1).max(65535).parse(process.env["STUDIO_PORT"] ?? 4317);
   const studio = await startStudioServer({
-    port, ...(process.env["STUDIO_DATA"] ? { dataDirectory: process.env["STUDIO_DATA"] } : {}),
+    port, fixtureAdapters: createFixtureAdapters,
+    ...(process.env["STUDIO_DATA"] ? { dataDirectory: process.env["STUDIO_DATA"] } : {}),
   });
   console.log(`AI Course Studio ready: ${studio.url} (local only; provider effects disabled)`);
   const shutdown = () => { void studio.close().then(() => process.exit(0)).catch((error: unknown) => { console.error(error); process.exitCode = 1; }); };

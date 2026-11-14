@@ -236,6 +236,7 @@ export class StudioStore {
     return this.atomic(() => {
       const affected = this.descendants(roots, includeRoots);
       const keys = new Set(affected.map(refKey));
+      const inputKeys = new Set([...keys, ...roots.map(refKey)]);
       for (const ref of affected) {
         this.db.prepare(`UPDATE artifacts SET invalidated_at=COALESCE(invalidated_at,?),
           invalidation_reason=COALESCE(invalidation_reason,?) WHERE id=? AND version=?`)
@@ -245,16 +246,21 @@ export class StudioStore {
       }
       const jobs = this.db.prepare("SELECT id,input_json,status FROM jobs").all();
       for (const job of jobs) {
-        let touched = decode<JobInput>(job["input_json"]).artifacts.some((ref) => keys.has(refKey(ref)));
+        let touched = decode<JobInput>(job["input_json"]).artifacts.some((ref) => inputKeys.has(refKey(ref)));
         const stages = this.db.prepare("SELECT id,outputs_json FROM stages WHERE job_id=?").all(String(job["id"]));
         for (const stage of stages) {
-          if (decode<ArtifactRef[]>(stage["outputs_json"]).some((ref) => keys.has(refKey(ref)))) {
+          if (decode<ArtifactRef[]>(stage["outputs_json"]).some((ref) => inputKeys.has(refKey(ref)))) {
             touched = true;
             this.db.prepare("UPDATE stages SET status='invalidated',error=?,error_code='STALE_INPUT' WHERE job_id=? AND id=?")
               .run(reason, String(job["id"]), String(stage["id"]));
           }
         }
         if (touched) {
+          this.db.prepare("UPDATE stages SET status='invalidated',error=?,error_code='STALE_INPUT' WHERE job_id=? AND status='running'")
+            .run(reason, String(job["id"]));
+          this.db.prepare(`UPDATE stage_attempts SET finished_at=?,outcome='invalidated',classification='stale',
+            error_code='STALE_INPUT',error=? WHERE job_id=? AND outcome='running'`)
+            .run(now, reason, String(job["id"]));
           this.db.prepare(`UPDATE jobs SET status=?,reason=?,updated_at=?,lease_token=NULL,lease_until=NULL
             WHERE id=?`).run(job["status"] === "cancelled" ? "cancelled" : "paused", `STALE_INPUT: ${reason}`, now, String(job["id"]));
         }

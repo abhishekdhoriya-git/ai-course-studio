@@ -165,6 +165,22 @@ test("lease/token claims prevent duplicate concurrent processing from two contro
   assert.equal((await running).status, "completed");
 });
 
+test("shutting down a peer controller cannot cancel another controller's live work", async (t) => {
+  const f = await fixture(t);
+  const started = deferred<void>(); const release = deferred<void>();
+  const owner = f.controller({
+    workflows: [testWorkflow()], testAdapters: [adapter(async () => { started.resolve(); await release.promise; return done(); })],
+  });
+  const job = owner.start("test-local");
+  const running = owner.run(job.id);
+  await started.promise;
+  const peer = f.controller();
+  peer.shutdown();
+  assert.equal(f.store.getJob(job.id)?.status, "running");
+  release.resolve();
+  assert.equal((await running).status, "completed");
+});
+
 test("expired running work recovers from disk without rerunning an approved completed stage", async (t) => {
   const f = await fixture(t);
   let workCalls = 0;
@@ -189,6 +205,30 @@ test("expired running work recovers from disk without rerunning an approved comp
   assert.equal(f.store.listSkillInvocations(job.id).length, 1);
   assert.equal(f.store.isApproved(approvedOutput, "lesson"), true);
   assert(f.store.listAttempts(job.id).some((entry) => entry["outcome"] === "interrupted"));
+});
+
+test("repeated crash recovery still exhausts the persisted stage attempt budget", async (t) => {
+  const f = await fixture(t);
+  const options = { workflows: [testWorkflow()], testAdapters: [adapter(done)] };
+  let controller = f.controller(options);
+  const job = controller.start("test-local");
+  let token = f.store.claimJob(job.id, 100, f.now)!;
+  const inspected = f.store.beginStage(job.id, token, "review-inputs", f.now);
+  await f.registry.invoke(f.registry.pin("review-artifacts"), { subject: "Crash budget test", artifacts: [] }, {
+    jobId: job.id, stageId: "review-inputs", invocationKey: "review-inputs", attempt: inspected,
+  });
+  f.store.completeStage(job.id, token, "review-inputs", [], f.now);
+  for (let crash = 0; crash < 3; crash++) {
+    if (crash > 0) token = f.store.claimJob(job.id, 100, f.now)!;
+    f.store.beginStage(job.id, token, "work", f.now);
+    await f.reopen(); f.advance(101); controller = f.controller(options);
+    assert.deepEqual(controller.recover(), [job.id]);
+  }
+  const result = await controller.run(job.id);
+  assert.equal(result.status, "failed");
+  assert.match(result.reason!, /ATTEMPTS_EXHAUSTED/);
+  assert.equal(result.stages[1]?.attempts, 3);
+  assert.equal(f.store.listAttempts(job.id).filter((attempt) => attempt["stage_id"] === "work").length, 3);
 });
 
 test("job definitions and exact adapter versions are snapshots, not the current workflow registry", async (t) => {

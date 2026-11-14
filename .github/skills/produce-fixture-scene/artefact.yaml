@@ -1,0 +1,79 @@
+name: produce-fixture-scene
+version: 1.0.0
+description: Route one non-cloned engineering-fixture scene through installed local media adapters.
+author: AI Course Studio contributors
+maintainers: []
+support: ""
+created: 2026-11-14
+updated: 2026-11-14
+license: MIT
+status: beta
+type: skill
+category: technical
+installer-group: delivery
+roles: [all]
+phases: [build]
+methodologies: [all]
+distribution:
+  rapid-module:
+    mode: standalone
+compatibility:
+  copilot: Document discovery is optional; execution requires compiled studio adapters
+prerequisites:
+  mcp_servers: []
+  cli_tools: []
+  python_packages: []
+  npm_packages: []
+  extensions: []
+  environment:
+    - name: AI Course Studio fixture runtime on Windows
+      purpose: Provide versioned local speech, media, registry and SQLite adapters
+      required: true
+documentation: https://github.com/abhishekdhoriya-git/ai-course-studio
+repo: abhishekdhoriya-git/ai-course-studio
+project: AI Course Studio
+product-family: []
+products: []
+technologies: [typescript, sqlite, remotion, ffmpeg]
+tags: [fixture, non-cloned, scene-production]
+execution: local-adapter
+activityKeys: [produce-fixture-scene]
+adapter:
+  id: studio.fixture-scene-contract
+  version: 1.0.0
+contracts:
+  input: studio.fixture-scene.input@1
+  output: studio.fixture-scene.output@1
+review:
+  status: reviewed
+  kind: contract-tests
+  evidence: Executable examples and tests\media.test.ts; contract review is not owner pilot approval.
+examples:
+  - name: original fixture scene is only a plan
+    input:
+      fixture: true
+      source: {id: scene, version: 1, hash: "0000000000000000000000000000000000000000000000000000000000000000"}
+      scene: {videoId: fixture, sceneId: sample, purpose: Contract example, script: hello, visual: Original text, assets: [], activities: []}
+    output:
+      sceneId: sample
+      sourceVersion: 1
+      scriptHash: 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+      status: validated-plan
+      operation: local-fixture-scene
+      measuredAudioRequired: true
+      nonCloned: true
+      humanReviewRequired: true
+  - name: changed source version never carries approval
+    input:
+      fixture: true
+      source: {id: scene, version: 2, hash: "0000000000000000000000000000000000000000000000000000000000000000"}
+      scene: {videoId: fixture, sceneId: sample, purpose: Contract example, script: hello, visual: Original text, assets: [], activities: []}
+    output:
+      sceneId: sample
+      sourceVersion: 2
+      scriptHash: 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+      status: validated-plan
+      operation: local-fixture-scene
+      measuredAudioRequired: true
+      nonCloned: true
+      humanReviewRequired: true

@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { artifactKindSchema, artifactRefSchema, jsonSchema } from "../domain/schemas.js";
+import { artifactKindSchema, artifactRefSchema, artifactSchemas, jsonSchema } from "../domain/schemas.js";
 import type { Json } from "../domain/schemas.js";
+import { sha256 } from "../domain/hash.js";
 
 export interface SkillAdapterContext {
   jobId: string; stageId: string; invocationKey: string; attempt: number; signal?: AbortSignal;
@@ -55,7 +56,27 @@ export const reviewArtifactsAdapter = typedLocalAdapter({
     humanReviewRequired: true as const,
   }),
 });
-export const builtinSkillAdapters: readonly LocalSkillAdapter[] = [reviewArtifactsAdapter];
+export const fixtureSceneInputSchema = z.object({
+  fixture: z.literal(true), source: artifactRefSchema, scene: artifactSchemas.scene,
+}).strict();
+export const fixtureSceneOutputSchema = z.object({
+  sceneId: z.string().min(1), sourceVersion: z.number().int().positive(),
+  scriptHash: z.string().regex(/^[a-f0-9]{64}$/),
+  status: z.literal("validated-plan"),
+  operation: z.literal("local-fixture-scene"), measuredAudioRequired: z.literal(true),
+  nonCloned: z.literal(true), humanReviewRequired: z.literal(true),
+}).strict();
+export const fixtureSceneAdapter = typedLocalAdapter({
+  id: "studio.fixture-scene-contract", version: "1.0.0", activityKeys: ["produce-fixture-scene"],
+  inputSchemaId: "studio.fixture-scene.input@1", outputSchemaId: "studio.fixture-scene.output@1",
+  input: fixtureSceneInputSchema, output: fixtureSceneOutputSchema,
+  execute: (input) => ({
+    sceneId: input.scene.sceneId, sourceVersion: input.source.version, scriptHash: sha256(input.scene.script),
+    status: "validated-plan" as const, operation: "local-fixture-scene" as const,
+    measuredAudioRequired: true as const, nonCloned: true as const, humanReviewRequired: true as const,
+  }),
+});
+export const builtinSkillAdapters: readonly LocalSkillAdapter[] = [reviewArtifactsAdapter, fixtureSceneAdapter];
 
 export function validatedAdapterOutput(adapter: LocalSkillAdapter, value: unknown): Json {
   return jsonSchema.parse(adapter.outputSchema.parse(value));

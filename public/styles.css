@@ -49,6 +49,7 @@ h3 { font-size:15px; margin:0 0 7px; text-wrap:balance; }
 .notice { display:none; margin-bottom:20px; padding:12px 16px; border-radius:8px; border:1px solid #37554a; background:#1a302b; color:#c0f8e3; overflow-wrap:anywhere; }
 .notice:not(:empty) { display:block; }
 .notice.error { border-color:#805061; background:#35252f; color:#ffd1d8; }
+.verification-banner { padding:14px 17px; border:1px solid #61533e; border-radius:8px; color:var(--amber); background:#2a261f; font-size:12px; margin-bottom:22px; }
 .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:24px; }
 .stat { padding:17px 20px; background:var(--panel); border:1px solid var(--line); border-radius:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
 .stat-label { color:var(--muted); font-size:11px; }

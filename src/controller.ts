@@ -61,6 +61,7 @@ export class StudioController {
   private readonly maxQueued: number;
   private readonly workspaceRoot: string;
   private readonly active = new Map<string, AbortController>();
+  private stopping = false;
   readonly repetitions: RepetitionTracker;
 
   constructor(readonly store: StudioStore, readonly registry: SkillRegistry, options: ControllerOptions = {}) {
@@ -118,6 +119,7 @@ export class StudioController {
   async run(jobId: string): Promise<JobRecord> {
     const initial = this.store.getJob(jobId);
     if (!initial) throw new StudioError("JOB_NOT_FOUND", "Job not found");
+    if (this.stopping) return initial;
     if (this.active.size >= this.maxConcurrency) return initial;
     const token = this.store.claimJob(jobId, this.leaseMs, this.clock(), Math.min(this.maxConcurrency, initial.definition.maxConcurrency));
     if (!token) return this.store.getJob(jobId)!;
@@ -201,6 +203,7 @@ export class StudioController {
     let next = 0;
     await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, async () => {
       while (next < ids.length) {
+        if (this.stopping) break;
         const id = ids[next++]!;
         results.push(await this.run(id));
       }
@@ -216,6 +219,10 @@ export class StudioController {
     return this.store.resumeJob(jobId, this.clock());
   }
   recover(): string[] { return this.store.recoverExpired(this.clock()); }
+  shutdown(): void {
+    this.stopping = true;
+    for (const jobId of this.active.keys()) this.cancel(jobId);
+  }
 
   private handleFailure(jobId: string, token: string, stage: StageDefinition, error: unknown): void {
     try { this.store.assertClaim(jobId, token, this.clock()); } catch { return; }

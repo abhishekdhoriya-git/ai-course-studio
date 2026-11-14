@@ -8,6 +8,8 @@ import { StudioStore } from "../src/storage/store.js";
 import type { ArtifactRef } from "../src/domain/schemas.js";
 import { StaleInputError } from "../src/domain/errors.js";
 import { planTargetedRevision } from "../src/workflows/revision.js";
+import { coursePlanning } from "../src/workflows/definitions.js";
+import { jobInputSchema } from "../src/domain/runtime.js";
 
 function fixture(t: TestContext): { store: StudioStore; reopen(): StudioStore } {
   const directory = join(process.cwd(), ".studio", "foundation-tests", randomUUID());
@@ -118,4 +120,47 @@ test("revoking a current approval invalidates descendants without deleting the i
   assert.equal(store.isCurrent(input), true);
   assert.equal(store.isCurrent(downstream), false);
   assert.equal(store.isApproved(input, "lesson"), false);
+});
+
+test("revocation fences root-consuming in-flight work before any descendant output exists, preserving unrelated leases", (t) => {
+  const f = fixture(t);
+  const input = report(f.store, "revoked-root", "current content");
+  const sibling = report(f.store, "unrelated-root", "unaffected");
+  approve(f.store, input); approve(f.store, sibling);
+  const makeJob = (ref: ArtifactRef) => f.store.createJob({
+    definition: coursePlanning, input: jobInputSchema.parse({ artifacts: [ref] }), skillPins: [],
+  }, 1000);
+  const job = makeJob(input);
+  const other = makeJob(sibling);
+  const token = f.store.claimJob(job.id, 10000, 1000)!;
+  const otherToken = f.store.claimJob(other.id, 10000, 1000)!;
+  f.store.beginStage(job.id, token, "review-inputs", 1000);
+  f.store.recordDecision({ artifactId: input.id, version: input.version, gate: "lesson", decision: "rejected" }, 1001);
+  assert.equal(f.store.isCurrent(input), true);
+  assert.equal(f.store.getJob(job.id)?.status, "paused");
+  assert.equal(f.store.getJob(job.id)?.stages[0]?.status, "invalidated");
+  assert.throws(() => f.store.assertClaim(job.id, token, 1002));
+  assert.throws(() => f.store.completeStage(job.id, token, "review-inputs", [input], 1002));
+  f.store.assertClaim(other.id, otherToken, 1002);
+  const reopened = f.reopen();
+  assert.equal(reopened.isApproved(input, "lesson"), false);
+  assert.equal(reopened.isApproved(sibling, "lesson"), true);
+  assert.equal(reopened.getJob(job.id)?.leaseToken, null);
+  assert(reopened.listAttempts(job.id).some((attempt) => attempt["outcome"] === "invalidated"));
+});
+
+test("revocation also fences a root held only as a prior stage reference, without invalidating its content", (t) => {
+  const { store } = fixture(t);
+  const root = report(store, "stage-held-root", "current");
+  approve(store, root);
+  const job = store.createJob({ definition: coursePlanning, input: jobInputSchema.parse({}), skillPins: [] }, 1000);
+  const token = store.claimJob(job.id, 10000, 1000)!;
+  store.beginStage(job.id, token, "review-inputs", 1000);
+  store.completeStage(job.id, token, "review-inputs", [root], 1000);
+  store.beginStage(job.id, token, "brief", 1000);
+  store.recordDecision({ artifactId: root.id, version: root.version, gate: "lesson", decision: "rejected" }, 1001);
+  assert.equal(store.isCurrent(root), true);
+  assert.equal(store.getJob(job.id)?.status, "paused");
+  assert.equal(store.getJob(job.id)?.stages[0]?.status, "invalidated");
+  assert.throws(() => store.assertClaim(job.id, token, 1002));
 });

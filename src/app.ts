@@ -18,7 +18,7 @@ const toRef = ({ id, version, hash }: ArtifactRef): ArtifactRef => ({ id, versio
 export interface AppOptions {
   workspaceRoot?: string;
   dataDirectory?: string;
-  fixtureAdapters?: (store: StudioStore, workspaceRoot: string) => readonly FixtureStageAdapter[];
+  fixtureAdapters?: (store: StudioStore, workspaceRoot: string, registry: SkillRegistry) => readonly FixtureStageAdapter[];
 }
 export class StudioApp {
   readonly root: string;
@@ -28,6 +28,7 @@ export class StudioApp {
   readonly token = randomUUID();
   private readonly pending = new Set<Promise<void>>();
   private readonly hasRenderer: boolean;
+  private readonly verificationMode: boolean;
   private closing = false;
 
   private constructor(options: AppOptions) {
@@ -37,8 +38,9 @@ export class StudioApp {
       throw new StudioError("DATA_DIRECTORY", "Use a relative directory inside .studio for private local data.");
     }
     this.store = new StudioStore(join(this.root, ...data.split(/[\\/]/), "studio.sqlite"));
+    this.verificationMode = data.split(/[\\/]/)[1] === "verification";
     this.registry = new SkillRegistry(this.store, { root: join(this.root, ".github", "skills") });
-    const fixtureAdapters = options.fixtureAdapters?.(this.store, this.root) ?? [];
+    const fixtureAdapters = options.fixtureAdapters?.(this.store, this.root, this.registry) ?? [];
     this.hasRenderer = fixtureAdapters.length === 4;
     this.controller = new StudioController(this.store, this.registry, { workspaceRoot: this.root, fixtureAdapters });
   }
@@ -74,6 +76,7 @@ export class StudioApp {
     const output = this.store.latestArtifact("fixture:output");
     return {
       token: this.token,
+      verificationMode: this.verificationMode,
       artifacts: all.slice(-500),
       jobs: jobs.slice(-50).map(({ leaseToken: _lease, ...job }) => job),
       decisions: decisions.slice(-500),
@@ -184,12 +187,16 @@ export class StudioApp {
 
   async tick(): Promise<void> {
     if (this.closing) return;
-    await this.controller.runQueued({ limit: 10, concurrency: 2 });
+    const work = this.controller.runQueued({ limit: 10, concurrency: 2 }).then(() => undefined)
+      .finally(() => this.pending.delete(work));
+    this.pending.add(work);
+    await work;
   }
+  async drain(): Promise<void> { await Promise.all(this.pending); }
 
   async close(): Promise<void> {
     this.closing = true;
-    for (const job of this.store.listJobs({ status: "running" })) this.controller.cancel(job.id);
+    this.controller.shutdown();
     await Promise.all(this.pending);
     this.store.close();
   }

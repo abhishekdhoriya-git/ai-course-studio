@@ -104,10 +104,18 @@ using `resume(jobId, replacements)`, then real rebuilt outputs and renewed revie
 ## Deliberate production limits
 
 All seven workflows are executable, but authoring, evidence collection, actual
-style observation, media rendering and digital-twin enrollment are not faked.
+reference-style observation and digital-twin enrollment are not faked.
 Missing inputs/resources pause with specific reasons. Actual local asset hashes
 are checked; playable/measurement evidence must come from the media pipeline,
 not a self-awarded quality score.
+
+The local app now installs four explicit fixture media adapters for narration,
+alignment, composition and rendering. They require `fixture: true`, the exact
+approved engineering storyboard and pinned scene-production/review skills.
+They create real local speech, captions and Remotion/FFmpeg exports, then pause
+for final fixture review. The opt-in CLI verification dataset labels its
+simulated input approvals and never supplies a real-presenter or owner-pilot
+approval. Unconfigured real production still stops; a fixture does not unlock it.
 
 Provider dispatch, identity transfer, purchases and publishing are hard-disabled,
 even with forged approvals. `ProviderOperationRunner` has only an explicitly

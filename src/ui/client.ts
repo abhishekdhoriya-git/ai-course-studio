@@ -117,6 +117,7 @@ async function refresh(force = false): Promise<void> {
 function render(): void {
   if (!state) return;
   const tab = currentTab();
+  required("verification-banner").hidden = !state.verificationMode;
   const copy = tabs[tab];
   required("page-name").textContent = copy.label;
   required("page-title").textContent = copy.title;
@@ -140,7 +141,9 @@ function renderReview(): void {
   if (!state) return;
   const panel = required("review-panel");
   const stats = element("div", "stats");
-  const approvals = state.decisions.filter((decision) => decision.decision === "approved" && decision.invalidatedAt === null
+  const latestDecisions = new Map(state.decisions.filter((decision) => decision.invalidatedAt === null)
+    .map((decision) => [`${decision.artifactId}@${decision.version}:${decision.gate}`, decision]));
+  const approvals = [...latestDecisions.values()].filter((decision) => decision.decision === "approved"
     && currentRecords().some((record) => record.id === decision.artifactId && record.version === decision.version)).length;
   for (const [label, count] of [["Artifact versions", state.totals.artifacts], ["Durable jobs", state.totals.jobs], ["Current approvals", approvals]] as const) {
     const stat = element("div", "stat");
@@ -194,6 +197,17 @@ function renderReview(): void {
     renderButton.disabled = !state.fixture.readyToRender;
     footer.append(renderButton);
     preview.append(header, media, footer);
+    if (output) {
+      const downloads = element("div", "preview-footer download-links");
+      for (const [id, label] of [
+        ["fixture:media:master", "Clean MP4"], ["fixture:media:captioned", "Captioned MP4"],
+        ["fixture:media:srt", "SRT"], ["fixture:media:vtt", "VTT"], ["fixture:media:transcript", "Final transcript"],
+      ] as const) {
+        const asset = currentRecords().find((record) => record.id === id);
+        if (asset) { const link = element("a", "", label); link.href = mediaUrl(asset); link.download = ""; downloads.append(link); }
+      }
+      preview.append(downloads);
+    }
     const gates = element("div", "card");
     const heading = element("div", "section-heading");
     heading.append(element("h2", "", "Before the first render"), element("span", "count", `${state.fixture.gates.filter((gate) => gate.approved).length} / ${state.fixture.gates.length} reviewed`));
@@ -402,7 +416,9 @@ function renderSkills(): void {
     const head = element("div", "skill-head"); head.append(element("h2", "", skill.name), tag(skill.promptOnly ? "Prompt only" : "Typed local adapter"));
     card.append(head, element("p", "muted", skill.promptOnly
       ? "Externally sourced, attributed CC BY 4.0 quality-loop instructions. This document cannot execute tools or grant approvals."
-      : "Structural reference checks only. It does not verify facts, aesthetics, identity, speech quality or human acceptance."),
+      : skill.name === "produce-fixture-scene"
+        ? "A validated per-scene plan routes to the fixed non-cloned local media pipeline. Actual audio and captions still require measurement; the plan is not a rendered asset."
+        : "Structural reference checks only. It does not verify facts, aesthetics, identity, speech quality or human acceptance."),
     element("div", "meta", `Version ${skill.version} / package SHA-256 ${skill.packageHash.slice(0, 20)}`),
     element("div", "metric-strip", skill.promptOnly ? "Pinned source: f2c462ee0727035719e4b5c8d69195f8ba4f1c4e" : `${skill.adapterId}@${skill.adapterVersion}`));
     stack.append(card);

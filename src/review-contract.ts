@@ -9,6 +9,7 @@ export interface ReviewDecision {
 export type PublicJob = Omit<JobRecord, "leaseToken">;
 export interface ReviewState {
   token: string;
+  verificationMode: boolean;
   artifacts: ArtifactRecord[];
   jobs: PublicJob[];
   decisions: ReviewDecision[];

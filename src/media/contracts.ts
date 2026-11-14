@@ -29,8 +29,19 @@ export interface RenderScene {
 }
 export interface RenderManifest {
   fixture: true; title: string; width: number; height: number; fps: number;
-  disclosure: string; scenes: RenderScene[];
+  disclosure: string; scenes: RenderScene[]; burnInCaptions?: boolean;
 }
+export const renderManifestSchema = z.object({
+  fixture: z.literal(true), title: z.string().min(1), width: z.literal(1280), height: z.literal(720), fps: z.literal(24),
+  disclosure: z.literal("ENGINEERING FIXTURE / NON-CLONED PRESENTER & VOICE"),
+  burnInCaptions: z.boolean().default(false),
+  scenes: z.array(z.object({
+    id: z.string().min(1), title: z.string().min(1), purpose: z.string().min(1), script: z.string().min(1),
+    layout: z.enum(["intro", "gates", "revision", "skills"]), durationFrames: z.number().int().positive(),
+    audioPath: z.string().regex(/^audio\/[a-f0-9]{64}\.wav$/),
+    captions: z.array(z.object({ startMs: z.number().nonnegative(), endMs: z.number().positive(), text: z.string().min(1) }).strict()).min(1),
+  }).strict()).length(4),
+}).strict();
 
 export const mediaCheckSchema = z.object({
   playable: z.literal(true), width: z.number().int().positive(), height: z.number().int().positive(),
@@ -38,6 +49,7 @@ export const mediaCheckSchema = z.object({
   audioStreams: z.number().int().positive(), videoStreams: z.number().int().positive(),
   integratedLufs: z.number().finite(), truePeakDb: z.number().finite(),
   subtitleCueCount: z.number().int().positive(), renderMs: z.number().nonnegative(),
+  silenceOver2sCount: z.number().int().nonnegative(),
   mediaPath: relativePathSchema, captionedPath: relativePathSchema,
   transcriptPath: relativePathSchema, srtPath: relativePathSchema, vttPath: relativePathSchema,
   nonCloned: z.literal(true), speechEngine: z.string().min(1), remotionVersion: z.literal("4.0.539"),
