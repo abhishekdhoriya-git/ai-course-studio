@@ -18,6 +18,8 @@ import {
 import type { CaptionCue, FixturePlan, MediaCheck, RenderManifest, RenderScene } from "./contracts.js";
 import { alignSpeech, toAss, toSrt, toVtt, validateCues } from "./captions.js";
 import { MediaTools, runMediaTool, validateFixtureVideo } from "./tools.js";
+import { FIXTURE_TEMPLATE_VERSION } from "./template.js";
+import { FIXTURE_TEMPLATE_ID, fixtureTemplate, fixtureTemplateSchema } from "./recipe.js";
 
 const sceneLayouts: Record<string, { title: string; layout: RenderScene["layout"] }> = {
   disclosure: { title: "Engineering fixture, not a pilot", layout: "intro" },
@@ -54,7 +56,14 @@ class FixturePipeline {
       throw new MissingInputError("FIXTURE_VISUAL_UNSUPPORTED", "The engineering fixture supports its original vector layouts and script revisions only. Install and review a new template/asset adapter for a visual replacement; it will not be silently ignored.");
     }
     const style = artifactSchemas["style-pack"].parse(this.store.requireCurrent(plan.style).content);
-    if (style.templateVersion !== "1.0.0" || style.parameters["background"] !== "#101827"
+    const templateRef = context.job.input.artifacts.find((ref) => ref.id === FIXTURE_TEMPLATE_ID);
+    if (!templateRef) throw new MissingInputError("TEMPLATE_UPDATE_REQUIRED", "Update the fixture animation template and review its new style version before rendering.");
+    const template = fixtureTemplateSchema.parse(dataOf(this.store, this.store.requireCurrent(templateRef))["template"]);
+    const installedTemplate = fixtureTemplate(this.root);
+    if (template.sourceHash !== installedTemplate.sourceHash || style.parameters["templateHash"] !== template.sourceHash) {
+      throw new MissingInputError("TEMPLATE_UPDATE_REQUIRED", "The installed animation/media code changed. Update the fixture template, renew its style approval and start a current job.");
+    }
+    if (style.templateVersion !== FIXTURE_TEMPLATE_VERSION || style.parameters["background"] !== "#101827"
       || style.parameters["accent"] !== "#68e8c5" || style.parameters["font"] !== "Arial") {
       throw new MissingInputError("STYLE_TEMPLATE_MISSING", "The installed fixture template supports the original starter palette/font only. Install and review a new template for another style.");
     }
@@ -200,23 +209,27 @@ class FixturePipeline {
       const audio = this.current(`fixture:audio:${scene.sceneId}`, "audio");
       const timing = this.current(`fixture:timing:${scene.sceneId}`, "timing");
       const captions = this.current(`fixture:captions:${scene.sceneId}`, "captions");
+      const speech = this.current(`fixture:speech:${scene.sceneId}`, "workflow-report");
+      const words = speechResultSchema.parse(speech.content.data["speech"]);
       const layout = sceneLayouts[scene.sceneId]!;
       const audioPath = `audio/${hashJson(audio.ref)}.wav`;
       sceneData.push({
         id: scene.sceneId, title: layout.title, layout: layout.layout, purpose: scene.purpose, script: scene.script,
         durationFrames: Math.ceil((audio.content.durationMs + 250) * plan.fps / 1000),
         audioPath, captions: timing.content.segments,
+        wordTimings: words.boundaries.map(({ text, startMs }) => ({ text, startMs })),
       });
       audioRefs.push(audio.ref); captionRefs.push(captions.ref);
     }
     const manifest: RenderManifest = {
       fixture: true, title: plan.title, width: plan.width, height: plan.height, fps: plan.fps,
       disclosure: plan.disclosure, scenes: sceneData, burnInCaptions: false,
+      template: { version: FIXTURE_TEMPLATE_VERSION, sourceHash: fixtureTemplate(this.root).sourceHash },
     };
     const composition = this.save({
       id: "fixture:composition", kind: "composition",
       content: { videoId: plan.videoId, scenes: plan.scenes, audio: audioRefs, captions: captionRefs, style: plan.style },
-      dependencies: [plan.storyboard],
+      dependencies: [plan.storyboard, this.current(FIXTURE_TEMPLATE_ID, "workflow-report").ref],
     }, context);
     const report = this.save({
       id: "fixture:render-manifest", kind: "workflow-report",
@@ -232,7 +245,11 @@ class FixturePipeline {
     // This data was produced by the installed typed composition stage, never by a model-generated module.
     const { validateRenderManifest } = await import("./composition.js");
     const manifest = validateRenderManifest(renderManifestSchema.parse(renderRecord.content.data["renderManifest"]));
-    const key = hashJson({ manifest, remotion: "4.0.539", fixtureAdapter: "1.0.0" });
+    const template = fixtureTemplate(this.root);
+    if (!manifest.template || manifest.template.version !== template.version || manifest.template.sourceHash !== template.sourceHash) {
+      throw new MissingInputError("STALE_COMPOSITION_TEMPLATE", "Rebuild composition with the current animation recipe; a stale template cannot reuse a cached video.");
+    }
+    const key = hashJson({ manifest, template, remotion: "4.0.539", fixtureAdapter: FIXTURE_TEMPLATE_VERSION });
     const folder = join(this.root, ".studio", "exports", key);
     const publicDir = join(this.root, ".studio", "render-inputs", key, "public");
     mkdirSync(folder, { recursive: true }); mkdirSync(join(publicDir, "audio"), { recursive: true });
@@ -354,6 +371,7 @@ class FixturePipeline {
         mediaPath: relative(this.root, master), captionedPath: relative(this.root, captioned),
         transcriptPath: relative(this.root, transcript), srtPath: relative(this.root, srt), vttPath: relative(this.root, vtt),
         nonCloned: true, speechEngine: `Windows System.Speech / ${[...voices].join(", ")}`, remotionVersion: "4.0.539", ffmpegVersion: await this.tools.version(),
+        templateVersion: template.version, templateHash: template.sourceHash,
       });
       const report = this.save({
         id: "fixture:media-checks", kind: "workflow-report",
@@ -385,7 +403,8 @@ export function createFixtureAdapters(store: StudioStore, workspaceRoot: string,
     ["studio.fixture-render", (context: StageAdapterContext) => pipeline.render(context)],
   ] as const;
   return operations.map(([id, execute]) => ({
-    id, version: "1.0.0", inputSchemaId: "studio.stage-input@1", outputSchemaId: "studio.stage-output@1",
+    id, version: id === "studio.fixture-composition" || id === "studio.fixture-render" ? FIXTURE_TEMPLATE_VERSION : "1.0.0",
+    inputSchemaId: "studio.stage-input@1", outputSchemaId: "studio.stage-output@1",
     execute: (_input, context) => execute(context),
   }));
 }

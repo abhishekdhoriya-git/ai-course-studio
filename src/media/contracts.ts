@@ -26,20 +26,24 @@ export interface CaptionCue { startMs: number; endMs: number; text: string }
 export interface RenderScene {
   id: string; title: string; purpose: string; script: string; layout: "intro" | "gates" | "revision" | "skills";
   durationFrames: number; audioPath: string; captions: CaptionCue[];
+  wordTimings?: { text: string; startMs: number }[] | undefined;
 }
 export interface RenderManifest {
   fixture: true; title: string; width: number; height: number; fps: number;
   disclosure: string; scenes: RenderScene[]; burnInCaptions?: boolean;
+  template?: { version: string; sourceHash: string } | undefined;
 }
 export const renderManifestSchema = z.object({
   fixture: z.literal(true), title: z.string().min(1), width: z.literal(1280), height: z.literal(720), fps: z.literal(24),
   disclosure: z.literal("ENGINEERING FIXTURE / NON-CLONED PRESENTER & VOICE"),
   burnInCaptions: z.boolean().default(false),
+  template: z.object({ version: z.string().regex(/^\d+\.\d+\.\d+$/), sourceHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional(),
   scenes: z.array(z.object({
     id: z.string().min(1), title: z.string().min(1), purpose: z.string().min(1), script: z.string().min(1),
     layout: z.enum(["intro", "gates", "revision", "skills"]), durationFrames: z.number().int().positive(),
     audioPath: z.string().regex(/^audio\/[a-f0-9]{64}\.wav$/),
     captions: z.array(z.object({ startMs: z.number().nonnegative(), endMs: z.number().positive(), text: z.string().min(1) }).strict()).min(1),
+    wordTimings: z.array(z.object({ text: z.string().min(1), startMs: z.number().nonnegative() }).strict()).min(1).optional(),
   }).strict()).length(4),
 }).strict();
 
@@ -54,5 +58,6 @@ export const mediaCheckSchema = z.object({
   transcriptPath: relativePathSchema, srtPath: relativePathSchema, vttPath: relativePathSchema,
   nonCloned: z.literal(true), speechEngine: z.string().min(1), remotionVersion: z.literal("4.0.539"),
   ffmpegVersion: z.string().min(1),
+  templateVersion: z.string().optional(), templateHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 export type MediaCheck = z.infer<typeof mediaCheckSchema>;

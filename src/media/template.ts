@@ -1,0 +1,1 @@
+export const FIXTURE_TEMPLATE_VERSION = "1.1.0";

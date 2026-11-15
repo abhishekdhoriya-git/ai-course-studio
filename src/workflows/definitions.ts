@@ -1,6 +1,7 @@
 import { workflowDefinitionSchema } from "../domain/runtime.js";
 import type { StageDefinition, WorkflowDefinition, WorkflowId } from "../domain/runtime.js";
 import type { ApprovalGate } from "../domain/schemas.js";
+import { FIXTURE_TEMPLATE_VERSION } from "../media/template.js";
 
 type Requirement = StageDefinition["requirements"][number];
 const operationGates: Record<string, ApprovalGate[]> = {
@@ -23,7 +24,7 @@ function stage(
     id, operation, requirements, missingInput,
     dependsOn: previous ? [previous] : [],
     inputSchema: "studio.stage-input@1", outputSchema: "studio.stage-output@1",
-    adapter: { id: adapter, version: "1.0.0" },
+    adapter: { id: adapter, version: adapter === "studio.fixture-composition" || adapter === "studio.fixture-render" ? FIXTURE_TEMPLATE_VERSION : "1.0.0" },
     ...(adapter === "studio.skill" ? { skill: "review-artifacts" } : {}),
     approvalGates: [...new Set([
       ...requirements.flatMap((requirement) => requirement.gate ? [requirement.gate] : []),
@@ -37,8 +38,8 @@ function stage(
 const inspect = (): StageDefinition => stage(
   "review-inputs", "review-inputs", [], "Load the reviewed artifact-reference skill", undefined, "studio.skill",
 );
-function definition(id: WorkflowId, description: string, stages: StageDefinition[]): WorkflowDefinition {
-  return workflowDefinitionSchema.parse({ id, version: "1.0.0", description, stages, maxQueued: 50, maxConcurrency: 2 });
+function definition(id: WorkflowId, description: string, stages: StageDefinition[], version = "1.0.0"): WorkflowDefinition {
+  return workflowDefinitionSchema.parse({ id, version, description, stages, maxQueued: 50, maxConcurrency: 2 });
 }
 
 export const coursePlanning = definition("course-planning", "Validate supplied evidence and curriculum; never invent teaching material.", [
@@ -76,7 +77,7 @@ export const lessonProduction = definition("lesson-production", "Gate supplied a
   },
   stage("human-review", "lesson:approval", [{ kind: "lesson-output" }], "Owner must approve the current real first lesson or explicitly fixture-only prototype", "render-and-checks"),
   stage("local-delivery", "lesson:delivery", [{ kind: "lesson-output" }], "Deliver only actual reviewed local media and supporting artifacts", "human-review"),
-]);
+], FIXTURE_TEMPLATE_VERSION);
 
 export const presenterEnrollment = definition("presenter-enrollment", "Identity enrollment is hard-disabled in this local foundation.", [
   inspect(),

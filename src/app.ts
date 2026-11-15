@@ -8,7 +8,7 @@ import type { FixtureStageAdapter } from "./controller.js";
 import { artifactSchemas, artifactRefSchema, approvalGateSchema, artifactKindSchema, jsonSchema } from "./domain/schemas.js";
 import type { ArtifactContent, ArtifactKind, ArtifactRef } from "./domain/schemas.js";
 import { StudioError, StaleInputError } from "./domain/errors.js";
-import { currentFixture, fixtureGates, prepareFixture, refreshFixtureScene, requireFixtureGates } from "./fixture.js";
+import { currentFixture, fixtureGates, fixtureNeedsTemplateUpdate, prepareFixture, refreshFixtureScene, requireFixtureGates } from "./fixture.js";
 import { FIXTURE_VIDEO_ID } from "./media/contracts.js";
 import { qualityRounds } from "./quality/progress.js";
 import { workflowDefinitions } from "./workflows/definitions.js";
@@ -73,6 +73,7 @@ export class StudioApp {
       };
     });
     const gates = fixture ? fixtureGates(this.store, fixture) : [];
+    const needsTemplateUpdate = fixture ? fixtureNeedsTemplateUpdate(this.store, this.root, fixture) : false;
     const output = this.store.latestArtifact("fixture:output");
     return {
       token: this.token,
@@ -87,7 +88,7 @@ export class StudioApp {
       fixture: fixture ? {
         title: fixture.title, manifest: toRef(this.store.latestArtifact("fixture:manifest")!),
         poster: fixture.poster, output: output && this.store.isCurrent(output) ? output : null,
-        gates, readyToRender: this.hasRenderer && gates.every((gate) => gate.approved),
+        gates, needsTemplateUpdate, readyToRender: this.hasRenderer && !needsTemplateUpdate && gates.every((gate) => gate.approved),
       } : null,
       totals: { artifacts: all.length, jobs: jobs.length, invocations: this.store.listSkillInvocations().length },
     };
@@ -158,6 +159,9 @@ export class StudioApp {
   renderFixture(): string {
     const plan = currentFixture(this.store);
     if (!plan) throw new StudioError("FIXTURE_MISSING", "Load or renew the engineering fixture first.");
+    if (fixtureNeedsTemplateUpdate(this.store, this.root, plan)) {
+      throw new StudioError("TEMPLATE_UPDATE_REQUIRED", "Choose Update fixture animations, review the new style version, then render. Old template approvals cannot cover new animation code.");
+    }
     requireFixtureGates(this.store, plan);
     if (!this.hasRenderer) throw new StudioError("FIXTURE_RENDERER_MISSING", "The local renderer is not installed in this runtime.");
     return this.store.atomic(() => {

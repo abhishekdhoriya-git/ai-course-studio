@@ -7,6 +7,9 @@ import { MissingInputError } from "./domain/errors.js";
 import type { StudioStore } from "./storage/store.js";
 import { FIXTURE_MANIFEST_ID, FIXTURE_VIDEO_ID, fixturePlanSchema } from "./media/contracts.js";
 import type { FixturePlan } from "./media/contracts.js";
+import { FIXTURE_TEMPLATE_VERSION } from "./media/template.js";
+import { FIXTURE_TEMPLATE_ID, fixtureTemplate } from "./media/recipe.js";
+import type { FixtureTemplate } from "./media/recipe.js";
 
 export const fixtureSceneTemplates = [
   {
@@ -56,7 +59,10 @@ function savePoster(store: StudioStore, workspaceRoot: string): ArtifactRef {
 
 export function prepareFixture(store: StudioStore, workspaceRoot: string): FixturePlan {
   const existing = store.latestArtifact(FIXTURE_MANIFEST_ID);
-  if (existing && store.isCurrent(existing)) return fixturePlanSchema.parse(artifactSchemas["workflow-report"].parse(existing.content).data["fixturePlan"]);
+  if (existing && store.isCurrent(existing)) {
+    const plan = fixturePlanSchema.parse(artifactSchemas["workflow-report"].parse(existing.content).data["fixturePlan"]);
+    return updateFixtureTemplate(store, workspaceRoot, plan);
+  }
   if (existing) throw new MissingInputError("FIXTURE_CHANGED", "The fixture has revisions. Renew the storyboard/style inputs instead of overwriting your edits.");
   const brief = store.saveArtifact({
     id: "fixture:brief", kind: "course-brief",
@@ -113,12 +119,15 @@ export function prepareFixture(store: StudioStore, workspaceRoot: string): Fixtu
     content: { asset: poster, fixture: true, notes: "Original still style sample. Approve only for this engineering fixture; no reference analysis or cloned presenter is implied." },
     dependencies: [specification],
   });
+  const template = fixtureTemplate(workspaceRoot);
+  const templateRef = saveTemplate(store, template);
   const style = store.saveArtifact({
     id: "fixture:style", kind: "style-pack",
     content: {
-      specification, sample: styleSample, templateVersion: "1.0.0",
-      parameters: { background: "#101827", accent: "#68e8c5", font: "Arial", captionSafeAreaPx: 96 },
+      specification, sample: styleSample, templateVersion: FIXTURE_TEMPLATE_VERSION,
+      parameters: { background: "#101827", accent: "#68e8c5", font: "Arial", captionSafeAreaPx: 96, templateHash: template.sourceHash },
     },
+    dependencies: [templateRef],
   });
   const scenes = fixtureSceneTemplates.map((draft) => store.saveArtifact({
     id: `fixture:scene:${draft.sceneId}`, kind: "scene",
@@ -137,6 +146,44 @@ export function prepareFixture(store: StudioStore, workspaceRoot: string): Fixtu
   });
   saveFixturePlan(store, plan);
   return plan;
+}
+
+function saveTemplate(store: StudioStore, template: FixtureTemplate): ArtifactRef {
+  return store.saveArtifact({
+    id: FIXTURE_TEMPLATE_ID, kind: "workflow-report",
+    content: {
+      summary: "Installed local animation template and media recipe; content review is a separate exact-version decision.",
+      data: { template: jsonSchema.parse(template) },
+    },
+  });
+}
+
+export function fixtureNeedsTemplateUpdate(store: StudioStore, root: string, plan: FixturePlan): boolean {
+  const style = artifactSchemas["style-pack"].parse(store.getArtifact(plan.style).content);
+  const template = fixtureTemplate(root);
+  const record = store.latestArtifact(FIXTURE_TEMPLATE_ID);
+  return !record || !store.isCurrent(record) || style.templateVersion !== template.version
+    || style.parameters["templateHash"] !== template.sourceHash;
+}
+
+function updateFixtureTemplate(store: StudioStore, root: string, plan: FixturePlan): FixturePlan {
+  if (!fixtureNeedsTemplateUpdate(store, root, plan)) return plan;
+  return store.atomic(() => {
+    const previous = store.getArtifact<"style-pack">(plan.style);
+    const template = fixtureTemplate(root);
+    const templateRef = saveTemplate(store, template);
+    const style = store.saveArtifact({
+      id: plan.style.id, kind: "style-pack",
+      content: {
+        ...previous.content, templateVersion: template.version,
+        parameters: { ...previous.content.parameters, templateHash: template.sourceHash },
+      },
+      dependencies: [...previous.dependencies.filter((ref) => ref.id !== FIXTURE_TEMPLATE_ID), templateRef],
+    });
+    const next = { ...plan, style };
+    saveFixturePlan(store, next);
+    return next;
+  });
 }
 
 export function currentFixture(store: StudioStore): FixturePlan | undefined {

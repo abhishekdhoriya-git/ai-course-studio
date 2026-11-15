@@ -131,8 +131,9 @@ function render(): void {
     if (key === tab) link?.setAttribute("aria-current", "page"); else link?.removeAttribute("aria-current");
   }
   const fixtureButton = required<HTMLButtonElement>("load-fixture");
-  fixtureButton.textContent = state.fixture ? "Engineering fixture loaded" : "Load engineering fixture";
-  fixtureButton.disabled = state.fixture !== null;
+  fixtureButton.textContent = state.fixture?.needsTemplateUpdate ? "Update fixture animations"
+    : state.fixture ? "Engineering fixture loaded" : "Load engineering fixture";
+  fixtureButton.disabled = state.fixture !== null && !state.fixture.needsTemplateUpdate;
   if (tab === "review") renderReview();
   if (tab === "workflows") renderWorkflows();
   if (tab === "skills") renderSkills();
@@ -202,7 +203,9 @@ function renderReview(): void {
       media.append(poster);
     }
     const footer = element("div", "preview-footer");
-    footer.append(element("p", "", output
+    footer.append(element("p", "", state.fixture.needsTemplateUpdate
+      ? "New animation code is installed. Update the fixture template and review its new style version before rendering."
+      : output
       ? `Actual local media / exact v${output.version}${output.invalidatedAt !== null ? " / historical, not approvable" : " / final owner review is separate"}.`
       : "Original still sample. Review the exact inputs before rendering."));
     const renderButton = button(output ? "Render current fixture again" : "Render approved fixture", async () => {
@@ -490,7 +493,13 @@ required("tabs").addEventListener("click", (event) => {
   if (tab && tab in tabs) { event.preventDefault(); void perform(() => navigate(tab as Tab)); }
 });
 required("load-fixture").addEventListener("click", () => {
-  void perform(async () => { await post("/api/fixture", {}); notify("Loaded a clearly labeled engineering fixture. No inputs were approved automatically."); await refresh(true); },
+  void perform(async () => {
+    const updating = state?.fixture?.needsTemplateUpdate;
+    await post("/api/fixture", {});
+    notify(updating ? "Updated the animation template as a new style version. Review that version before rendering; no approvals were copied."
+      : "Loaded a clearly labeled engineering fixture. No inputs were approved automatically.");
+    await refresh(true);
+  },
     required<HTMLButtonElement>("load-fixture"));
 });
 required<HTMLFormElement>("brief-form").addEventListener("submit", (event) => {

@@ -27,7 +27,7 @@ try {
       break;
     case "fixture":
       await app.loadFixture();
-      console.log("Engineering fixture created as drafts. Open the local review UI and approve the exact fixture inputs; no real pilot decisions were selected.");
+      console.log("Engineering fixture created/updated as drafts. Review the current style/template and other exact input versions in the local UI; no approvals or pilot decisions were inferred.");
       break;
     case "render-fixture":
       if (verification) {

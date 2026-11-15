@@ -33,7 +33,7 @@ export interface TestStageAdapter {
 }
 export interface FixtureStageAdapter {
   id: "studio.fixture-narration" | "studio.fixture-alignment" | "studio.fixture-composition" | "studio.fixture-render";
-  version: "1.0.0";
+  version: "1.0.0" | "1.1.0";
   inputSchemaId: "studio.stage-input@1"; outputSchemaId: "studio.stage-output@1";
   execute(input: StageInput, context: StageAdapterContext, records: ArtifactRecord[]): Promise<StageOutputRequest>;
 }
@@ -85,7 +85,7 @@ export class StudioController {
     }
     for (const adapter of options.fixtureAdapters ?? []) {
       const key = `${adapter.id}@${adapter.version}`;
-      if (!fixtureAdapterIds.has(adapter.id) || adapter.version !== "1.0.0" || this.fixtureAdapters.has(key)) {
+      if (!fixtureAdapterIds.has(adapter.id) || !["1.0.0", "1.1.0"].includes(adapter.version) || this.fixtureAdapters.has(key)) {
         throw new PolicyError("ADAPTER_ALLOWLIST", "Only installed, versioned fixture adapters can handle fixture media");
       }
       this.fixtureAdapters.set(key, adapter);

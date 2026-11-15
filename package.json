@@ -18,6 +18,7 @@
     "skills:check": "tsx src/cli.ts skills-check",
     "test:ui": "playwright test",
     "test:render": "npm run render:fixture -- --verification && tsx tests/render.integration.ts",
+    "test:motion": "tsx tests/motion.render.ts",
     "doctor": "tsx src/cli.ts doctor"
   },
   "dependencies": {

@@ -30,6 +30,11 @@ Open **http://127.0.0.1:4317**. The review desk provides a brief editor, artifac
 previews, exact-version approval/rejection, JSON editing, workflow start/resume/
 cancel, targeted revision mapping, skill pins and the live quality-loop page.
 
+See [Using the studio](docs/using-studio.md) for reviewing the latest video,
+editing a scene, regenerating it and starting a real course brief. The fixture
+now uses narration-timed sequential reveals, drawn diagram connections and a
+moving version focus rather than showing all teaching blocks at once.
+
 `npm run test:ui` exercises actual browser flows using installed Microsoft Edge.
 The core tests use isolated file-backed databases and injected test adapters;
 they never call a paid media provider.
@@ -85,6 +90,9 @@ installed; it is never silently ignored. Historical lesson versions preview
 their own media, and downloads retain exact asset versions. A matching cached
 render reuses its verification/approval references; `renderMs` describes the
 execution that produced those measurements, not a fresh-render benchmark.
+Animation/media source hashes and a versioned template are part of the render
+recipe. A template update requires a new style review and a new output review;
+unchanged narration and unrelated scene inputs remain reusable.
 
 ## Skills, workflows and durability
 
