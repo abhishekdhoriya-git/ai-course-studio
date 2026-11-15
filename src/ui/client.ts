@@ -94,6 +94,13 @@ async function navigate(tab: Tab, artifact?: ArtifactRef): Promise<void> {
   if (artifact) { url.searchParams.set("artifact", artifact.id); url.searchParams.set("version", String(artifact.version)); }
   history.pushState(null, "", url);
   render();
+  if (artifact) focusArtifact();
+}
+
+function focusArtifact(): void {
+  const inspector = document.querySelector<HTMLElement>(".artifact-card");
+  inspector?.scrollIntoView({ block: "start" });
+  inspector?.focus({ preventScroll: true });
 }
 
 async function refresh(force = false): Promise<void> {
@@ -111,7 +118,11 @@ async function refresh(force = false): Promise<void> {
     const focusedControl = document.activeElement instanceof HTMLInputElement
       || document.activeElement instanceof HTMLTextAreaElement || document.activeElement instanceof HTMLSelectElement;
     const playing = document.querySelector<HTMLVideoElement>(".preview-media video");
-    if (force || (next !== signature && !dirty && !editing && !focusedControl && (!playing || playing.paused))) { signature = next; render(); }
+    if (force || (next !== signature && !dirty && !editing && !focusedControl && (!playing || playing.paused))) {
+      const firstLoad = signature === "";
+      signature = next; render();
+      if (firstLoad && new URL(location.href).searchParams.has("artifact")) focusArtifact();
+    }
   } catch (error) { notify(error instanceof Error ? error.message : "Review refresh failed.", true); }
   finally { refreshBusy = false; }
 }
@@ -131,9 +142,10 @@ function render(): void {
     if (key === tab) link?.setAttribute("aria-current", "page"); else link?.removeAttribute("aria-current");
   }
   const fixtureButton = required<HTMLButtonElement>("load-fixture");
-  fixtureButton.textContent = state.fixture?.needsTemplateUpdate ? "Update fixture animations"
+  fixtureButton.textContent = state.fixture?.needsDependencyRepair ? "Rebuild review drafts"
+    : state.fixture?.needsTemplateUpdate ? "Update fixture animations"
     : state.fixture ? "Engineering fixture loaded" : "Load engineering fixture";
-  fixtureButton.disabled = state.fixture !== null && !state.fixture.needsTemplateUpdate;
+  fixtureButton.disabled = state.fixture !== null && !state.fixture.needsTemplateUpdate && !state.fixture.needsDependencyRepair;
   if (tab === "review") renderReview();
   if (tab === "workflows") renderWorkflows();
   if (tab === "skills") renderSkills();
@@ -203,7 +215,9 @@ function renderReview(): void {
       media.append(poster);
     }
     const footer = element("div", "preview-footer");
-    footer.append(element("p", "", state.fixture.needsTemplateUpdate
+    footer.append(element("p", "", state.fixture.needsDependencyRepair
+      ? "An input edit invalidated the lesson/storyboard links. Rebuild review drafts to preserve your edit and restore the required review queue."
+      : state.fixture.needsTemplateUpdate
       ? "New animation code is installed. Update the fixture template and review its new style version before rendering."
       : output
       ? `Actual local media / exact v${output.version}${output.invalidatedAt !== null ? " / historical, not approvable" : " / final owner review is separate"}.`
@@ -233,7 +247,7 @@ function renderReview(): void {
     }
     const gates = element("div", "card");
     const heading = element("div", "section-heading");
-    heading.append(element("h2", "", "Before the first render"), element("span", "count", `${state.fixture.gates.filter((gate) => gate.approved).length} / ${state.fixture.gates.length} reviewed`));
+    heading.append(element("h2", "", "Required input reviews"), element("span", "count", `${state.fixture.gates.filter((gate) => gate.approved).length} / ${state.fixture.gates.length} reviewed`));
     const list = element("div", "gate-list");
     state.fixture.gates.forEach((gate, index) => {
       const artifact = state!.artifacts.find((record) => record.id === gate.ref.id && record.version === gate.ref.version);
@@ -246,6 +260,12 @@ function renderReview(): void {
       list.append(row);
     });
     gates.append(heading, list, element("p", "help-note", "Approvals apply only to the displayed version. Edits invalidate the affected downstream work."));
+    if (state.fixture.needsDependencyRepair) {
+      gates.append(element("p", "help-note", "Choose Rebuild review drafts first. Rebuilding preserves authored content but never grants new approvals."));
+    } else {
+      const nextGate = state.fixture.gates.find((gate) => !gate.approved);
+      if (nextGate) gates.append(button("Review next required version", () => navigate("review", nextGate.ref), "primary small"));
+    }
     grid.append(preview, gates); panel.append(grid);
   }
   panel.append(artifactInspector());
@@ -253,6 +273,7 @@ function renderReview(): void {
 
 function artifactInspector(): HTMLElement {
   const card = element("div", "card artifact-card");
+  card.tabIndex = -1;
   if (!state) return card;
   const url = new URL(location.href);
   const id = url.searchParams.get("artifact");
@@ -288,6 +309,8 @@ function artifactInspector(): HTMLElement {
     tag(current ? "Current" : "Invalidated", current ? "current" : "invalidated"));
   card.append(title, element("div", "meta", `SHA-256 ${artifact.hash.slice(0, 16)} / ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(artifact.createdAt)}`));
   const content = artifact.content;
+  if (artifact.kind === "curriculum") card.append(element("p", "help-note",
+    "The curriculum title describes the course outline; it is not the spoken video script. To change narration, edit a fixture:scene script. After an outline-title edit, rebuild and review the linked lesson/storyboard drafts."));
   if ("script" in content) card.append(element("p", "artifact-copy", content.script));
   else if (artifact.kind === "script-storyboard" && "scenes" in content) {
     for (const scene of content.scenes) {
@@ -345,6 +368,10 @@ function artifactInspector(): HTMLElement {
     const reject = button("Reject / revoke", () => decide("rejected"), "danger");
     approve.disabled = !current; reject.disabled = !current;
     actions.append(gateLabel, noteLabel, approve, reject); card.append(actions);
+    const next = state.fixture?.gates.find((gate) => !gate.approved);
+    if (next && (next.ref.id !== artifact.id || next.ref.version !== artifact.version)) {
+      actions.append(button(`Next review: ${next.gate.replace(/-/g, " ")} v${next.ref.version}`, () => navigate("review", next.ref), "secondary"));
+    }
     const latest = state.decisions.findLast((decision) => decision.artifactId === artifact.id && decision.version === artifact.version && decision.invalidatedAt === null);
     if (latest) card.append(element("p", "help-note", `${latest.gate}: ${latest.decision}${latest.note ? ` / ${latest.note}` : ""}`));
   }
@@ -495,10 +522,16 @@ required("tabs").addEventListener("click", (event) => {
 required("load-fixture").addEventListener("click", () => {
   void perform(async () => {
     const updating = state?.fixture?.needsTemplateUpdate;
+    const recovering = state?.fixture?.needsDependencyRepair;
     await post("/api/fixture", {});
-    notify(updating ? "Updated the animation template as a new style version. Review that version before rendering; no approvals were copied."
+    notify(recovering ? "Rebuilt linked review drafts without changing authored content or copying approvals. Review the current lesson/storyboard versions, then render."
+      : updating ? "Updated the animation template as a new style version. Review that version before rendering; no approvals were copied."
       : "Loaded a clearly labeled engineering fixture. No inputs were approved automatically.");
     await refresh(true);
+    if (recovering) {
+      const next = state?.fixture?.gates.find((gate) => !gate.approved);
+      if (next) await navigate("review", next.ref);
+    }
   },
     required<HTMLButtonElement>("load-fixture"));
 });

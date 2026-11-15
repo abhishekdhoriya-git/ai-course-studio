@@ -20,7 +20,7 @@ export interface ReviewState {
   fixture: {
     title: string; manifest: ArtifactRef | null; output: ArtifactRef | null; poster: ArtifactRef | null;
     gates: { ref: ArtifactRef; gate: ApprovalGate; approved: boolean }[];
-    readyToRender: boolean; needsTemplateUpdate: boolean;
+    readyToRender: boolean; needsTemplateUpdate: boolean; needsDependencyRepair: boolean;
   } | null;
   totals: { artifacts: number; jobs: number; invocations: number };
 }

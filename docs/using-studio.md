@@ -43,8 +43,10 @@ updating animation code cannot silently return an old static MP4.
 
 1. Select the relevant `fixture:scene:...` artifact, then **Edit typed manifest**.
    Change its `script` and save a new version.
-2. Review and approve the new `fixture:storyboard` version. Renew any other gate
-   the review desk marks as needing review, then render the current fixture.
+2. Choose **Review next required version** to open each pending input. Read its
+   content and choose **Approve vN** on the displayed version. This includes the
+   new `fixture:storyboard`; do not approve the invalidated older version.
+   When every required input is reviewed, **Render approved fixture** is enabled.
 3. Watch the latest `fixture:output`, review its captions and timing, and decide
    on that exact version. Unchanged scene audio remains reusable.
 
@@ -53,6 +55,29 @@ B-roll asset, layout, voice or pronunciation engine needs a corresponding
 reviewed adapter; the fixture will not pretend to implement it.
 **Map affected revision** records a targeted request and its impact; it does not
 generate a replacement by itself.
+
+## If an outline-title edit blocks rendering
+
+The `fixture:curriculum` title describes the course outline. It does not change
+the narrated scene script or the lesson's on-screen title. A course-title edit
+invalidates linked lesson/storyboard versions and their derived exports.
+
+Choose **Rebuild review drafts** to relink those drafts to your edited curriculum
+without overwriting authored scene content or copying approvals. Then choose
+**Review next required version**, approve the current lesson and storyboard
+versions after reading them, and choose **Render approved fixture**. Your
+already-current curriculum/style decisions remain intact. Final output review
+is still separate.
+
+Opening a review scrolls to its artifact details. After approving one input,
+the **Next review: ...** button beside the review controls opens the next
+pending version; after the final required input, scroll back to the preview and
+choose **Render approved fixture**.
+
+This safe relinking is limited to compatible fixture metadata changes.
+Changing the lesson list, prerequisites or evidence, or making inconsistent
+storyboard/scene edits, remains an explicit blocker until consistent authored
+inputs are supplied. The studio will not silently invent new course content.
 
 ## Start your first real course
 

@@ -4,12 +4,14 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { startStudioServer } from "../../src/server.js";
 import type { ReviewState } from "../../src/review-contract.js";
+import { createFixtureAdapters } from "../../src/media/pipeline.js";
+import { currentFixture, fixtureGates } from "../../src/fixture.js";
 
 let studio: Awaited<ReturnType<typeof startStudioServer>>;
 let directory: string;
 test.beforeEach(async () => {
   directory = `.studio\\ui-tests\\${randomUUID()}`;
-  studio = await startStudioServer({ port: 0, dataDirectory: directory });
+  studio = await startStudioServer({ port: 0, dataDirectory: directory, fixtureAdapters: createFixtureAdapters });
 });
 test.afterEach(async () => {
   await studio.close();
@@ -38,7 +40,7 @@ test("fixture review and scene edit preserve exact versions and revoke affected 
   await page.goto(studio.url);
   await expect(page.getByText("Artifact versions", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Load engineering fixture", exact: true }).click();
-  await expect(page.getByText("Before the first render", { exact: true })).toBeVisible();
+  await expect(page.getByText("Required input reviews", { exact: true })).toBeVisible();
   await expect(page.getByText("0 / 5 reviewed", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Render approved fixture" })).toBeDisabled();
   mkdirSync(join(process.cwd(), ".studio", "quality"), { recursive: true });
@@ -60,5 +62,37 @@ test("fixture review and scene edit preserve exact versions and revoke affected 
   const after = (await (await page.request.get(`${studio.url}/api/state`)).json()) as ReviewState;
   expect(after.fixture?.gates.find((gate) => gate.gate === "script-storyboard")?.approved).toBe(false);
   expect(studio.app.store.latestArtifact("fixture:scene:disclosure")?.version).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test("a curriculum title edit retains recovery controls and guides the lesson/storyboard review before enabling render", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await studio.app.loadFixture();
+  for (const gate of fixtureGates(studio.app.store, currentFixture(studio.app.store)!)) studio.app.store.recordDecision({
+    artifactId: gate.ref.id, version: gate.ref.version, gate: gate.gate, decision: "approved",
+  });
+  await page.goto(`${studio.url}/?tab=review&artifact=fixture%3Acurriculum&version=1`);
+  await page.getByRole("button", { name: "Edit typed manifest" }).click();
+  const curriculum = studio.app.store.latestArtifact("fixture:curriculum")!;
+  await page.getByLabel("Artifact content (JSON)").fill(JSON.stringify({ ...curriculum.content, title: "An authored UI-test outline title" }, null, 2));
+  await page.getByRole("button", { name: "Save new artifact version" }).click();
+  await expect(page.getByRole("button", { name: "Rebuild review drafts", exact: true })).toBeEnabled();
+  await expect(page.getByText("Required input reviews", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Render approved fixture", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Approve v2", exact: true }).click();
+  await page.getByRole("button", { name: "Rebuild review drafts", exact: true }).click();
+  await expect(page.getByLabel("Artifact and version")).toHaveValue("fixture:lesson@2");
+  await expect(page.getByRole("status")).toContainText("without changing authored content or copying approvals");
+  await expect(page.getByRole("button", { name: "Render approved fixture", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Approve v2", exact: true }).click();
+  await page.getByRole("button", { name: "Next review: script storyboard v2", exact: true }).click();
+  await expect(page.getByLabel("Artifact and version")).toHaveValue("fixture:storyboard@2");
+  await expect(page.getByText("From brief to reviewed lesson", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Approve v2", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Render approved fixture", exact: true })).toBeEnabled();
+  expect(studio.app.store.listArtifacts({ kind: "audio" })).toHaveLength(0);
+  expect(studio.app.store.listArtifacts({ kind: "lesson-output" })).toHaveLength(0);
+  expect(studio.app.store.latestArtifact("fixture:curriculum")?.content).toMatchObject({ title: "An authored UI-test outline title" });
   expect(errors).toEqual([]);
 });

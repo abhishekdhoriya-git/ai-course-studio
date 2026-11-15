@@ -115,3 +115,90 @@ test("updating an old fixture animation pack through the UI creates a new unappr
   assert.equal(pending[0]?.ref.version, legacy.version + 1);
   assert.equal(f.server.app.store.isApproved(legacy, "style"), false);
 });
+
+test("an approved curriculum-title edit can rebuild linked review drafts without losing scene edits or copying approvals", async (t) => {
+  const f = await setup(t, true);
+  await f.server.app.loadFixture();
+  const editedScene = f.server.app.store.latestArtifact("fixture:scene:gates")!;
+  const script = "An authored test correction that must survive curriculum relinking.";
+  f.server.app.saveArtifact({
+    id: editedScene.id, kind: "scene", content: { ...editedScene.content, script },
+    dependencies: editedScene.dependencies, expectedVersion: editedScene.version,
+  });
+  const before = currentFixture(f.server.app.store)!;
+  for (const gate of fixtureGates(f.server.app.store, before)) f.server.app.store.recordDecision({
+    artifactId: gate.ref.id, version: gate.ref.version, gate: gate.gate, decision: "approved",
+  });
+  const curriculum = f.server.app.store.getArtifact(before.curriculum);
+  const title = "A revised test-only course outline title";
+  f.server.app.saveArtifact({
+    id: curriculum.id, kind: "curriculum", content: { ...curriculum.content, title },
+    dependencies: curriculum.dependencies, expectedVersion: curriculum.version,
+  });
+  const changed = f.server.app.store.latestArtifact(curriculum.id)!;
+  f.server.app.store.recordDecision({ artifactId: changed.id, version: changed.version, gate: "curriculum", decision: "approved" });
+  const stale = await f.read();
+  assert.equal(stale.fixture?.needsDependencyRepair, true);
+  assert.equal(stale.fixture?.readyToRender, false);
+  assert.equal((await f.post("/api/fixture", {})).status, 201);
+  const next = currentFixture(f.server.app.store)!;
+  assert.equal(next.curriculum.version, changed.version);
+  assert.equal(artifactSchemas.curriculum.parse(f.server.app.store.getArtifact(next.curriculum).content).title, title);
+  assert.equal(next.lesson.version, before.lesson.version + 1);
+  assert.equal(next.storyboard.version, before.storyboard.version + 1);
+  assert.equal(artifactSchemas.lesson.parse(f.server.app.store.getArtifact(next.lesson).content).curriculum.hash, changed.hash);
+  assert.equal(artifactSchemas.scene.parse(f.server.app.store.latestArtifact(editedScene.id)!.content).script, script);
+  const pending = fixtureGates(f.server.app.store, next).filter((gate) => !gate.approved);
+  assert.deepEqual(pending.map((gate) => gate.gate), ["lesson", "script-storyboard"]);
+  assert.equal(f.server.app.store.isApproved(next.curriculum, "curriculum"), true);
+  assert.equal(f.server.app.store.isApproved(next.style, "style"), true);
+  assert.equal(f.server.app.store.isApproved(next.lesson, "lesson"), false);
+  assert.equal(f.server.app.store.isApproved(next.storyboard, "script-storyboard"), false);
+  assert.equal((await f.read()).fixture?.needsDependencyRepair, false);
+  assert.equal((await f.post("/api/fixture/render", {})).status, 400);
+  const newPlanning = f.server.app.store.listJobs().findLast((job) => job.workflowId === "course-planning");
+  assert(newPlanning?.input.artifacts.some((ref) => ref.id === changed.id && ref.hash === changed.hash));
+  assert.equal((await f.post("/api/fixture", {})).status, 201);
+  assert.equal(currentFixture(f.server.app.store)?.storyboard.version, next.storyboard.version);
+});
+
+test("structural curriculum changes remain explicit blockers without discarding authored edits", async (t) => {
+  const f = await setup(t);
+  await f.server.app.loadFixture();
+  const before = currentFixture(f.server.app.store)!;
+  const record = f.server.app.store.getArtifact(before.curriculum);
+  const content = artifactSchemas.curriculum.parse(record.content);
+  const changed = f.server.app.saveArtifact({
+    id: record.id, kind: "curriculum",
+    content: { ...content, lessons: [...content.lessons, { id: "another-lesson", title: "Authored extra lesson", objective: "New outcome", prerequisites: [] }] },
+    dependencies: record.dependencies, expectedVersion: record.version,
+  });
+  const response = await f.post("/api/fixture", {});
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /lessons, sources or prerequisites changed/);
+  assert.equal(f.server.app.store.latestArtifact(record.id)?.hash, changed.hash);
+  assert.equal(f.server.app.store.latestArtifact(before.lesson.id)?.version, before.lesson.version);
+  assert.equal(f.server.app.store.latestArtifact(before.storyboard.id)?.version, before.storyboard.version);
+  assert.equal((await f.read()).fixture?.needsDependencyRepair, true);
+});
+
+test("storyboard-only script edits are preserved as a conflict rather than overwritten from older scene records", async (t) => {
+  const f = await setup(t);
+  await f.server.app.loadFixture();
+  const before = currentFixture(f.server.app.store)!;
+  const record = f.server.app.store.getArtifact(before.storyboard);
+  const content = artifactSchemas["script-storyboard"].parse(record.content);
+  const authored = "A storyboard-only correction that must not be discarded.";
+  const changed = f.server.app.saveArtifact({
+    id: record.id, kind: "script-storyboard",
+    content: { ...content, scenes: content.scenes.map((scene, index) => index === 0 ? { ...scene, script: authored } : scene) },
+    dependencies: record.dependencies, expectedVersion: record.version,
+  });
+  const response = await f.post("/api/fixture", {});
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /storyboard and individual scene scripts differ/);
+  const latest = f.server.app.store.latestArtifact(record.id)!;
+  assert.equal(latest.hash, changed.hash);
+  assert.equal(artifactSchemas["script-storyboard"].parse(latest.content).scenes[0]?.script, authored);
+  assert.equal(f.server.app.store.latestArtifact(before.lesson.id)?.version, before.lesson.version);
+});

@@ -8,7 +8,7 @@ import type { FixtureStageAdapter } from "./controller.js";
 import { artifactSchemas, artifactRefSchema, approvalGateSchema, artifactKindSchema, jsonSchema } from "./domain/schemas.js";
 import type { ArtifactContent, ArtifactKind, ArtifactRef } from "./domain/schemas.js";
 import { StudioError, StaleInputError } from "./domain/errors.js";
-import { currentFixture, fixtureGates, fixtureNeedsTemplateUpdate, prepareFixture, refreshFixtureScene, requireFixtureGates } from "./fixture.js";
+import { currentFixture, fixtureGates, fixtureNeedsTemplateUpdate, lastFixtureForReview, prepareFixture, refreshFixtureScene, requireFixtureGates } from "./fixture.js";
 import { FIXTURE_VIDEO_ID } from "./media/contracts.js";
 import { qualityRounds } from "./quality/progress.js";
 import { workflowDefinitions } from "./workflows/definitions.js";
@@ -60,7 +60,9 @@ export class StudioApp {
   state(): ReviewState {
     const all = this.store.listArtifacts({ currentOnly: false });
     const jobs = this.store.listJobs({ limit: 1000 });
-    const fixture = currentFixture(this.store);
+    const current = currentFixture(this.store);
+    const fixture = current ?? lastFixtureForReview(this.store);
+    const needsDependencyRepair = fixture !== undefined && current === undefined;
     const decisions = this.store.listDecisions().map((row): ReviewDecision => {
       const decision = z.object({
         artifact_id: z.string(), version: z.number(), gate: approvalGateSchema,
@@ -88,7 +90,8 @@ export class StudioApp {
       fixture: fixture ? {
         title: fixture.title, manifest: toRef(this.store.latestArtifact("fixture:manifest")!),
         poster: fixture.poster, output: output && this.store.isCurrent(output) ? output : null,
-        gates, needsTemplateUpdate, readyToRender: this.hasRenderer && !needsTemplateUpdate && gates.every((gate) => gate.approved),
+        gates, needsTemplateUpdate, needsDependencyRepair,
+        readyToRender: this.hasRenderer && !needsDependencyRepair && !needsTemplateUpdate && gates.every((gate) => gate.approved),
       } : null,
       totals: { artifacts: all.length, jobs: jobs.length, invocations: this.store.listSkillInvocations().length },
     };
@@ -97,7 +100,9 @@ export class StudioApp {
   async loadFixture(): Promise<ArtifactRef> {
     const plan = prepareFixture(this.store, this.root);
     const existing = this.store.listJobs({ limit: 1000 }).find((job) =>
-      job.workflowId === "course-planning" && job.input.videoId === FIXTURE_VIDEO_ID);
+      job.workflowId === "course-planning" && job.input.videoId === FIXTURE_VIDEO_ID
+      && job.input.artifacts.some((ref) => ref.id === plan.curriculum.id && ref.version === plan.curriculum.version && ref.hash === plan.curriculum.hash)
+      && job.input.artifacts.every((ref) => this.store.isCurrent(ref)));
     if (!existing) {
       const inputs = this.store.listArtifacts().filter((artifact) => artifact.id.startsWith("fixture:"));
       const job = this.controller.start("course-planning", { artifacts: inputs.map(toRef), videoId: plan.videoId });
@@ -158,7 +163,7 @@ export class StudioApp {
 
   renderFixture(): string {
     const plan = currentFixture(this.store);
-    if (!plan) throw new StudioError("FIXTURE_MISSING", "Load or renew the engineering fixture first.");
+    if (!plan) throw new StudioError("FIXTURE_MISSING", "Choose Rebuild review drafts to relink edited inputs, then review the current lesson/storyboard versions.");
     if (fixtureNeedsTemplateUpdate(this.store, this.root, plan)) {
       throw new StudioError("TEMPLATE_UPDATE_REQUIRED", "Choose Update fixture animations, review the new style version, then render. Old template approvals cannot cover new animation code.");
     }

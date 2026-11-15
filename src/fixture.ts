@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { artifactSchemas, jsonSchema } from "./domain/schemas.js";
 import type { ArtifactRef, ApprovalGate } from "./domain/schemas.js";
-import { sha256 } from "./domain/hash.js";
+import { canonicalJson, sha256 } from "./domain/hash.js";
 import { MissingInputError } from "./domain/errors.js";
 import type { StudioStore } from "./storage/store.js";
 import { FIXTURE_MANIFEST_ID, FIXTURE_VIDEO_ID, fixturePlanSchema } from "./media/contracts.js";
@@ -63,7 +63,10 @@ export function prepareFixture(store: StudioStore, workspaceRoot: string): Fixtu
     const plan = fixturePlanSchema.parse(artifactSchemas["workflow-report"].parse(existing.content).data["fixturePlan"]);
     return updateFixtureTemplate(store, workspaceRoot, plan);
   }
-  if (existing) throw new MissingInputError("FIXTURE_CHANGED", "The fixture has revisions. Renew the storyboard/style inputs instead of overwriting your edits.");
+  if (existing) {
+    const plan = fixturePlanSchema.parse(artifactSchemas["workflow-report"].parse(existing.content).data["fixturePlan"]);
+    return store.atomic(() => updateFixtureTemplate(store, workspaceRoot, rebuildFixtureReview(store, plan)));
+  }
   const brief = store.saveArtifact({
     id: "fixture:brief", kind: "course-brief",
     content: {
@@ -191,6 +194,74 @@ export function currentFixture(store: StudioStore): FixturePlan | undefined {
   return artifact && store.isCurrent(artifact)
     ? fixturePlanSchema.parse(artifactSchemas["workflow-report"].parse(artifact.content).data["fixturePlan"])
     : undefined;
+}
+
+export function lastFixtureForReview(store: StudioStore): FixturePlan | undefined {
+  const artifact = store.latestArtifact(FIXTURE_MANIFEST_ID);
+  return artifact ? fixturePlanSchema.parse(artifactSchemas["workflow-report"].parse(artifact.content).data["fixturePlan"]) : undefined;
+}
+
+function rebuildFixtureReview(store: StudioStore, previousPlan: FixturePlan): FixturePlan {
+  const curriculumRecord = store.latestArtifact(previousPlan.curriculum.id);
+  const lessonRecord = store.latestArtifact(previousPlan.lesson.id);
+  const storyboardRecord = store.latestArtifact(previousPlan.storyboard.id);
+  const styleRecord = store.latestArtifact(previousPlan.style.id);
+  const sampleRecord = store.latestArtifact(previousPlan.styleSample.id);
+  const posterRecord = store.latestArtifact(previousPlan.poster.id);
+  if (!curriculumRecord || !lessonRecord || !storyboardRecord || !styleRecord || !sampleRecord || !posterRecord) {
+    throw new MissingInputError("FIXTURE_INPUT_MISSING", "Keep the edited inputs and supply the missing fixture review records before rebuilding.");
+  }
+  store.requireCurrent(curriculumRecord);
+  store.requireCurrent(styleRecord);
+  store.requireCurrent(sampleRecord);
+  store.requireCurrent(posterRecord);
+  const curriculum = artifactSchemas.curriculum.parse(curriculumRecord.content);
+  const previousCurriculum = artifactSchemas.curriculum.parse(store.getArtifact(previousPlan.curriculum).content);
+  if (canonicalJson({ ...curriculum, title: "" }) !== canonicalJson({ ...previousCurriculum, title: "" })) {
+    throw new MissingInputError("CURRICULUM_REAUTHORING_REQUIRED",
+      "The curriculum's lessons, sources or prerequisites changed. Your edit is preserved; supply a consistent authored lesson/storyboard through Course planning instead of silently reusing the engineering fixture.");
+  }
+  const lessonContent = artifactSchemas.lesson.parse(lessonRecord.content);
+  if (lessonContent.curriculum.id !== curriculumRecord.id || lessonContent.videoId !== previousPlan.videoId) {
+    throw new MissingInputError("FIXTURE_LESSON_CONFLICT", "The lesson belongs to a different course/video. Resolve that authored input before rebuilding fixture review drafts.");
+  }
+  const sceneRecords = previousPlan.scenes.map((ref) => {
+    const record = store.latestArtifact(ref.id);
+    if (!record) throw new MissingInputError("FIXTURE_SCENE_MISSING", `Supply the edited scene record: ${ref.id}`);
+    return record;
+  });
+  const scenes = sceneRecords.map((record) => artifactSchemas.scene.parse(record.content));
+  const storyboardContent = artifactSchemas["script-storyboard"].parse(storyboardRecord.content);
+  if (canonicalJson(scenes) !== canonicalJson(storyboardContent.scenes)) {
+    throw new MissingInputError("FIXTURE_STORYBOARD_CONFLICT",
+      "The storyboard and individual scene scripts differ. Your edits are preserved; reconcile those authored scripts before rebuilding review drafts.");
+  }
+  const toRef = ({ id, version, hash }: ArtifactRef): ArtifactRef => ({ id, version, hash });
+  const replacements = new Map<string, ArtifactRef>([[curriculumRecord.id, toRef(curriculumRecord)]]);
+  const rebind = (references: ArtifactRef[]) => references.map((ref) => replacements.get(ref.id) ?? ref);
+  const lesson = store.saveArtifact({
+    id: lessonRecord.id, kind: "lesson", content: { ...lessonContent, curriculum: toRef(curriculumRecord) },
+    dependencies: rebind(lessonRecord.dependencies),
+  });
+  replacements.set(lesson.id, lesson);
+  const sceneRefs = sceneRecords.map((record, index) => {
+    const scene = store.saveArtifact({
+      id: record.id, kind: "scene", content: scenes[index]!, dependencies: rebind(record.dependencies),
+    });
+    replacements.set(scene.id, scene);
+    return scene;
+  });
+  const storyboard = store.saveArtifact({
+    id: storyboardRecord.id, kind: "script-storyboard",
+    content: { ...storyboardContent, lesson, scenes },
+    dependencies: rebind(storyboardRecord.dependencies),
+  });
+  const plan = {
+    ...previousPlan, title: lessonContent.title, curriculum: toRef(curriculumRecord), lesson, scenes: sceneRefs, storyboard,
+    style: toRef(styleRecord), styleSample: toRef(sampleRecord), poster: toRef(posterRecord),
+  };
+  saveFixturePlan(store, plan);
+  return plan;
 }
 
 export function saveFixturePlan(store: StudioStore, plan: FixturePlan): ArtifactRef {
